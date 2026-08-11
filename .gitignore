@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.expo/
+.vite/
+.playwright-cli/
+coverage/
+output/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

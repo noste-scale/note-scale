@@ -1,0 +1,12 @@
+{
+  "name": "NoteScale — Gammes majeures",
+  "short_name": "NoteScale",
+  "description": "Construis et révise les gammes majeures hors ligne.",
+  "lang": "fr",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f6fc",
+  "theme_color": "#5b36d7",
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

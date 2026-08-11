@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "NoteScale",
+    "slug": "notescale",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "notescale",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.notescale.mobile"
+    },
+    "android": {
+      "package": "app.notescale.mobile"
+    },
+    "plugins": ["expo-router", "expo-audio"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
