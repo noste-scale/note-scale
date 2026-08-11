@@ -94,6 +94,8 @@ do not require a network after installation.
 
 ## GitHub Pages
 
+Live web app: <https://noste-scale.github.io/note-scale/>
+
 1. Push this repository to GitHub with `main` as the deployment branch.
 2. In **Settings → Pages**, select **GitHub Actions** as the source.
 3. Push `main` or manually run the **Test and deploy NoteScale Pages** workflow.
@@ -102,8 +104,8 @@ Vite derives its default base from `GITHUB_REPOSITORY` in Actions, uses `/` for 
 `owner.github.io` repository and `/<repository>/` otherwise, and accepts `VITE_BASE_PATH`
 as an explicit slash-normalized override. The workflow runs install/tests/
 audio regeneration/validation, typecheck/ESLint, Android/iOS Expo exports, and web build, then uploads `apps/web/dist` with the official Pages
-actions. It needs no runtime secret. A local build proves bundle compatibility,
-not a live deployment.
+actions. It needs no runtime secret. The production deployment is live at the
+URL above.
 
 ## Manual verification ledger
 
@@ -114,7 +116,7 @@ not a live deployment.
 | Keyboard, visible focus, reduced motion, 320 px layout | Authored semantics plus a local production-browser 320 px check | Screen-reader, touch-device, and broader manual accessibility pass |
 | Local audio lifecycle | Adapter tests and generated files | Audible browser/device smoke test |
 | Android/iOS bundle resolution | Expo export commands when recorded below | Physical/emulator journey and audio checks |
-| GitHub Pages | Workflow and repository-aware base | Authenticated workflow run and public URL |
+| GitHub Pages | Successful authenticated workflow run and public URL | None |
 
 ### Environment record
 
@@ -132,7 +134,7 @@ not a live deployment.
 - Windows can typecheck and produce static web/Expo bundles.
 - No physical Android or iOS result is inferred from a bundle export.
 - Final iOS device proof requires iOS hardware, macOS, or an EAS build.
-- No Git remote/public Pages URL was available when the repository was created.
+- 2026-08-11: GitHub Pages deployment completed successfully at <https://noste-scale.github.io/note-scale/>.
 
 ### Dependency audit note
 
