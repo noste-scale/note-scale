@@ -56,3 +56,24 @@ test("timeout reports diagnostics, exits non-zero, and terminates Expo", () => {
     if (Number.isInteger(leaderPid)) killFixtureTree(leaderPid, pids);
   }
 });
+
+test("healthy Metro keeps a full response budget near the stability deadline", () => {
+  const preload = `
+    import { setTimeout as delay } from "node:timers/promises";
+    const fetch = globalThis.fetch;
+    const setTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = (callback, ms, ...args) => setTimeout(callback, Math.max(1, ms - 10), ...args);
+    globalThis.fetch = async (url, options) => {
+      await delay(25, undefined, { signal: options.signal });
+      return fetch(url, options);
+    };
+  `;
+  const result = spawnSync(process.execPath, [
+    "--experimental-strip-types",
+    "--import", `data:text/javascript,${encodeURIComponent(preload)}`,
+    join(root, "scripts", "verify-mobile-start.ts"),
+  ], { encoding: "utf8", timeout: 45_000 });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Verified Expo\/Metro startup, typed routes/);
+});

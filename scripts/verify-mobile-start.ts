@@ -275,7 +275,8 @@ try {
   const stableUntil = performance.now() + stabilityMs;
   while (performance.now() < stableUntil) {
     assertActive("during the stability window");
-    if (!await metroIsHealthy(port, Math.min(1_000, stableUntil - performance.now()))) {
+    // The observation deadline must not shrink a healthy response's timeout to 1 ms.
+    if (!await metroIsHealthy(port)) {
       throw new Error("Metro stopped reporting healthy during the stability window.");
     }
     assertActive("during the stability window");
