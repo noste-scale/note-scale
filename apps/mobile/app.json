@@ -12,7 +12,8 @@
       "bundleIdentifier": "app.notescale.mobile"
     },
     "android": {
-      "package": "app.notescale.mobile"
+      "package": "app.notescale.mobile",
+      "versionCode": 1
     },
     "plugins": ["expo-router", "expo-audio"],
     "experiments": {

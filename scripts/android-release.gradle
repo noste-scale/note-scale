@@ -1,0 +1,33 @@
+// ponytail: inject signing at build time; Expo can regenerate android/ unchanged.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            project.androidComponents.finalizeDsl { android ->
+                // ponytail: short per-checkout cache avoids Ninja's Windows 260-character ceiling.
+                def checkout = Integer.toHexString(project.rootDir.absolutePath.hashCode())
+                android.externalNativeBuild.cmake.buildStagingDirectory = new File(project.gradle.gradleUserHomeDir, "cxx/${checkout}")
+                def credentialsFile = new File(project.rootDir, '../../../signing/android/release.properties').canonicalFile
+                if (!credentialsFile.isFile()) {
+                    throw new GradleException('Missing signing/android/release.properties. Restore the original signing backup; do not generate another key.')
+                }
+                def credentials = new Properties()
+                credentialsFile.withInputStream { credentials.load(it) }
+                ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { name ->
+                    if (!credentials.getProperty(name)?.trim()) {
+                        throw new GradleException("Missing signing property: ${name}")
+                    }
+                }
+                def keystore = new File(credentialsFile.parentFile, credentials.getProperty('storeFile')).canonicalFile
+                if (!keystore.isFile()) {
+                    throw new GradleException('Release keystore missing. Restore the original signing backup.')
+                }
+                def signing = android.signingConfigs.maybeCreate('notescaleRelease')
+                signing.storeFile = keystore
+                signing.storePassword = credentials.getProperty('storePassword')
+                signing.keyAlias = credentials.getProperty('keyAlias')
+                signing.keyPassword = credentials.getProperty('keyPassword')
+                android.buildTypes.getByName('release').signingConfig = signing
+            }
+        }
+    }
+}

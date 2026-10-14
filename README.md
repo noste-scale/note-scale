@@ -25,11 +25,25 @@ npm run ios
 The web development server prints its local URL. Expo prints the device,
 emulator, and development-build options supported by the current machine.
 
+## Local Android release (APK + AAB)
+
+See [the local build guide](docs/build-android.md) for the Windows toolchain,
+signing-key backup, and rebuild procedure. With `JAVA_HOME`, `ANDROID_HOME`,
+and the original ignored `signing/android/` directory in place:
+
+```powershell
+npm run build:android
+```
+
+Verified release files are copied to `output/android/`. No EAS account or cloud
+build is used. Never commit the signing directory or regenerate its key for an update.
+
 ## Verification commands
 
 ```bash
 npm run generate:audio
 npm run verify:audio
+npm run verify:mobile-start
 npm test
 npm run typecheck
 npm run lint
@@ -42,6 +56,9 @@ npm run export --workspace @notescale/mobile
 `generate:audio` reproduces two chromatic octaves (24 short WAV samples) in the root asset source
 and both platform bundles. The files are synthesized locally and contain no
 third-party recording.
+
+`verify:mobile-start` starts Expo offline on a temporary local port, waits for
+Metro to become healthy, observes it briefly, and then shuts it down.
 
 ## Architecture
 

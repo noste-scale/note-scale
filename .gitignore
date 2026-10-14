@@ -10,3 +10,13 @@ output/
 .env
 .env.*
 !.env.example
+
+# Local Android signing material and generated native projects.
+/signing/
+/apps/mobile/android/
+/apps/mobile/ios/
+*.keystore
+*.jks
+*.aab
+*.apk
+credentials.json

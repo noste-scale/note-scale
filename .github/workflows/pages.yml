@@ -23,6 +23,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify mobile startup
+        run: npm run verify:mobile-start
+        timeout-minutes: 2
       - run: npm run generate:audio
       - run: npm run verify:audio
       - name: Check deterministic generated audio

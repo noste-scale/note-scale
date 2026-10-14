@@ -8,12 +8,16 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "expo-router": "57.0.12"
+  },
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "generate:audio": "node --experimental-strip-types scripts/generate-audio.ts",
     "verify:audio": "node --experimental-strip-types scripts/verify-audio.ts",
+    "verify:mobile-start": "node --experimental-strip-types scripts/verify-mobile-start.ts",
     "verify:web-build": "node --experimental-strip-types scripts/verify-web-build.ts",
     "start:web": "npm run dev --workspace @notescale/web --",
     "dev:web": "npm run dev --workspace @notescale/web --",
@@ -21,10 +25,11 @@
     "start:mobile": "npm run start --workspace @notescale/mobile",
     "android": "npm run android --workspace @notescale/mobile",
     "ios": "npm run ios --workspace @notescale/mobile",
-    "test": "npm run test --workspaces --if-present",
+    "test": "node --experimental-strip-types --test scripts/verify-mobile-start.test.ts && npm run test --workspaces --if-present",
     "typecheck": "tsc -p tsconfig.scripts.json && npm run typecheck --workspaces --if-present",
     "lint": "eslint scripts && npm run lint --workspaces --if-present",
-    "build": "npm run build --workspace @notescale/web"
+    "build": "npm run build --workspace @notescale/web",
+    "build:android": "pwsh -NoProfile -File scripts/build-android.ps1"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
