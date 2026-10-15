@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
+import { isValidElement } from "react";
+import ts from "typescript";
+import * as music from "@notescale/music";
+import * as domain from "../src/domain.js";
+import * as audioModel from "../src/audio-model.js";
 import {
   createEmptyProgress,
   decodeProgress,
@@ -12,6 +19,7 @@ import {
 import {
   orderedPitchSequence,
   playbackConfigurationKey,
+  playbackStatus,
   SAMPLE_KEYS,
   sampleKeyForPitch,
   scalePlaybackLabel,
@@ -67,6 +75,18 @@ assert.equal(phase, "playing");
 assert.equal(transitionPlayback(phase, "complete"), "completed");
 assert.equal(transitionPlayback("playing", "preempt"), "preempted");
 assert.equal(transitionPlayback("paused", "stop"), "stopped");
+for (const [state, expected] of [
+  ["stopped", "Lecture prête."],
+  ["playing", "Lecture en cours."],
+  ["paused", "Lecture en pause."],
+  ["completed", "Lecture terminée."],
+  ["preempted", "Lecture interrompue par une autre lecture."],
+] as const) {
+  assert.equal(playbackStatus(state), expected, `audio status must match ${state}`);
+  for (const message of ["Lecture arrêtée.", "La lecture a échoué.", "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse."]) {
+    assert.equal(playbackStatus(state, message), message, "explicit controller messages must win over phase defaults");
+  }
+}
 assert.notEqual(playbackConfigurationKey(["Do", "Ré"], "up", false), playbackConfigurationKey(["Do", "Mi"], "up", false), "changing scale notes must reset playback");
 assert.notEqual(playbackConfigurationKey(["Do"], "up", false), playbackConfigurationKey(["Do"], "down", false), "changing direction must reset playback");
 assert.notEqual(playbackConfigurationKey(["Do"], "up", false), playbackConfigurationKey(["Do"], "up", true), "changing speed must reset playback");
@@ -258,4 +278,121 @@ assert.equal(shouldApplyStoredPreference(0, 0), true);
 assert.equal(shouldApplyStoredPreference(0, 1), false, "late theme hydration must not replace an explicit choice");
 assert.deepEqual([nextThemePreference("system"), nextThemePreference("light"), nextThemePreference("dark")], ["light", "dark", "system"]);
 
-console.log(`mobile self-check: ${SAMPLE_KEYS.length} samples, hydration, serialized saves, grading, routing, theme, and playback verified`);
+// ponytail: execute real TSX with host stubs for prop/element checks; device tests still own native layout and accessibility.
+async function componentModule(path: string, mocks: Record<string, unknown>, globals: Record<string, unknown> = {}) {
+  const filename = join(here, path);
+  const require = createRequire(filename);
+  const source = ts.transpileModule(await readFile(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX }, fileName: filename }).outputText;
+  const exports: Record<string, any> = {};
+  runInNewContext(source, { exports, require: (name: string) => mocks[name] ?? require(name), ...globals }, { filename });
+  return exports;
+}
+function elementTree(node: any): any[] {
+  if (Array.isArray(node)) return node.flatMap(elementTree);
+  if (!isValidElement<any>(node)) return node === null || node === undefined || typeof node === "boolean" ? [] : [node];
+  if (typeof node.type === "function") return elementTree((node.type as (props: any) => unknown)(node.props));
+  return [node, ...elementTree(node.props.children)];
+}
+const textOf = (node: unknown) => elementTree(node).filter((entry) => typeof entry === "string" || typeof entry === "number").join("");
+const components = await componentModule("../src/components.tsx", {
+  "react-native": { Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View", StyleSheet: { create: (styles: unknown) => styles } },
+  "react-native-safe-area-context": { SafeAreaView: "SafeAreaView" },
+  "expo-router": { Link: "Link" },
+  "@notescale/music": music,
+  "./theme": { useTheme: () => ({}) },
+});
+for (const [path, prefix, destinations, pathname, visibleLabel] of [
+  ["../app/(tabs)/learn.tsx", "../../src", domain.lessons, "/lesson/[id]", "Ouvrir la leçon"],
+  ["../app/scales.tsx", "../src", domain.scales, "/scale/[id]", "Voir la construction"],
+] as const) {
+  const screen = await componentModule(path, { [`${prefix}/components`]: components, [`${prefix}/domain`]: domain, [`${prefix}/audio`]: { AudioControls: () => null } });
+  const links = elementTree(screen.default()).filter((entry) => entry?.type === "Link" && entry.props.href.pathname === pathname);
+  assert.equal(links.length, destinations.length);
+  const labels = links.map((link, index) => {
+    const destination = destinations[index]!;
+    const pressable = elementTree(link.props.children).find((entry) => entry?.type === "Pressable");
+    assert.equal(link.props.href.params.id, destination.id, "contextual names must preserve their route destination");
+    assert.equal(textOf(pressable), visibleLabel, "visible link labels must stay unchanged");
+    assert.ok(pressable.props.accessibilityLabel.includes("title" in destination ? destination.title : destination.frenchName));
+    return pressable.props.accessibilityLabel;
+  });
+  assert.equal(new Set(labels).size, destinations.length, "every repeated native link needs a distinct accessible name");
+}
+for (const [name, roles] of [["Action", ["button", "radio"]], ["Chip", ["button", "radio", "checkbox"]]] as const) {
+  for (const role of roles) for (const selected of [false, true]) {
+    const control = elementTree(components[name]!({ label: "Do", role, selected, onPress: () => undefined }))[0];
+    assert.equal(control.props.accessibilityRole, role);
+    assert.equal(control.props.accessibilityLabel, "Do", "selection marker must not pollute the accessible name");
+    assert.deepEqual({ ...control.props.accessibilityState }, role === "button" ? { disabled: false, selected } : { disabled: false, checked: selected });
+    assert.equal(textOf(control), selected ? "✓ Do" : "Do", "only selected options need a non-color marker");
+    const style = typeof control.props.style === "function" ? control.props.style({ pressed: false }) : control.props.style;
+    assert.ok(style.some((entry: any) => entry.maxWidth === "100%" && entry.flexShrink === 1), "long actions must reuse chip width bounds");
+  }
+}
+let progressForScreen = createEmptyProgress();
+let hydratedForScreen = false;
+const progressScreen = await componentModule("../app/(tabs)/progress.tsx", {
+  "../../src/components": components, "../../src/domain": domain, "@notescale/music": music,
+  "../../src/progress": { useProgress: () => ({ progress: progressForScreen, hydrated: hydratedForScreen, warning: "Avertissement local" }) },
+});
+assert.ok(textOf(progressScreen.default()).includes("Lecture de ta progression locale."));
+assert.ok(!textOf(progressScreen.default()).includes("Ta première gamme t’attend"));
+hydratedForScreen = true;
+for (let count = 0; count <= 2; count += 1) {
+  const tree = elementTree(progressScreen.default());
+  const text = textOf(progressScreen.default());
+  assert.ok(text.includes(count === 1 ? "exercice réalisé" : "exercices réalisés"));
+  assert.ok(text.includes(`${count} ${count === 1 ? "bonne réponse" : "bonnes réponses"}`));
+  assert.ok(text.includes(count === 0 ? "0 jours" : "1 jour"));
+  assert.ok(text.includes(count === 0 ? "Commence un exercice pour obtenir une recommandation." : "Aucune gamme à revoir pour le moment."));
+  assert.ok(text.includes("Avertissement local"), "progress warnings must survive empty-state polish");
+  assert.equal(tree.some((entry) => entry?.type === "Link" && entry.props.href === "/exercises"), count === 0);
+  progressForScreen = recordAttempt(progressForScreen, { scaleId: "C", exerciseType: "build-scale", correct: true }, new Date(), () => count / 3);
+}
+
+// Host/player hooks are deliberately stubbed: this executes controller + renderer, not native audio or layout.
+for (const compact of [false, true]) {
+  const hooks: any[] = [];
+  let hookIndex = 0;
+  const useState = (initial?: any) => {
+    const index = hookIndex++;
+    if (!(index in hooks)) hooks[index] = typeof initial === "function" ? initial() : initial;
+    return [hooks[index], (next: any) => { hooks[index] = typeof next === "function" ? next(hooks[index]) : next; }];
+  };
+  let failPlayback = false;
+  let timerCallback: (() => void) | undefined;
+  const player = { play: () => { if (failPlayback) throw new Error("Test playback failure"); }, pause: () => undefined, seekTo: async () => undefined, replace: () => undefined, setPlaybackRate: () => undefined };
+  const audio = await componentModule("../src/audio.tsx", {
+    "@notescale/music": music, "./audio-model": audioModel, "./components": components, "react-native": { View: "View" },
+    react: { useState, useRef: (initial: unknown) => useState({ current: initial })[0], useEffect: () => undefined },
+    "expo-audio": { useAudioPlayer: () => player, setAudioModeAsync: async () => undefined },
+    ...Object.fromEntries(SAMPLE_KEYS.map((key, index) => [`../assets/audio/${key}.wav`, index + 1])),
+  }, { setTimeout: (callback: () => void) => { timerCallback = callback; return 1; }, clearTimeout: () => { timerCallback = undefined; } });
+  let rendered: unknown;
+  const renderAudio = () => { hookIndex = 0; rendered = audio.AudioControls!({ notes: ["Do"], compact, scaleLabel: "Do majeur" }); return textOf(rendered); };
+  const control = (label: string) => elementTree(rendered).find((entry) => entry?.type === "Pressable" && entry.props.accessibilityLabel === `${label} la gamme Do majeur`);
+  const press = (label: string) => { assert.equal(control(label).props.disabled, false); control(label).props.onPress(); };
+  assert.equal(renderAudio().includes("Lecture prête."), !compact);
+  assert.equal(control("Pause").props.disabled, true);
+  press("Lire");
+  assert.ok(renderAudio().includes("Lecture en cours."), `${compact ? "compact" : "full"} controls must show their actual playing phase`);
+  press("Pause");
+  assert.ok(renderAudio().includes("Lecture en pause."));
+  press("Reprendre");
+  assert.ok(renderAudio().includes("Lecture en cours."));
+  press("Arrêter");
+  assert.ok(renderAudio().includes("Lecture arrêtée."));
+  assert.equal(control("Pause").props.disabled, true);
+  press("Lire");
+  renderAudio();
+  assert.ok(timerCallback);
+  timerCallback();
+  assert.ok(renderAudio().includes("Lecture terminée."));
+  failPlayback = true;
+  press("Recommencer");
+  const failureText = renderAudio();
+  assert.ok(failureText.includes("La lecture a échoué. Les autres contrôles restent disponibles."));
+  assert.ok(!failureText.includes("Lecture prête."), "explicit playback errors must override the stopped-phase fallback");
+}
+
+console.log(`mobile self-check: ${SAMPLE_KEYS.length} samples, hydration, serialized saves, grading, route/control component props, theme, and full/compact playback verified; native rendering not tested`);

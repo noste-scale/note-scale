@@ -45,6 +45,16 @@ export function scalePlaybackLabel(action: string, scaleLabel?: string): string 
 export type PlaybackPhase = "stopped" | "playing" | "paused" | "completed" | "preempted";
 export type PlaybackEvent = "start" | "restart" | "pause" | "resume" | "stop" | "complete" | "preempt";
 
+export function playbackStatus(phase: PlaybackPhase, message?: string): string {
+  return message ?? {
+    stopped: "Lecture prête.",
+    playing: "Lecture en cours.",
+    paused: "Lecture en pause.",
+    completed: "Lecture terminée.",
+    preempted: "Lecture interrompue par une autre lecture.",
+  }[phase];
+}
+
 export function transitionPlayback(phase: PlaybackPhase, event: PlaybackEvent): PlaybackPhase {
   if (event === "start" || event === "restart") return "playing";
   if (event === "stop") return "stopped";

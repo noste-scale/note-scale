@@ -9,7 +9,7 @@ export default function LearnScreen() {
         <Card key={lesson.id}>
           <Heading>{lesson.title}</Heading>
           <Body muted>{lesson.body[0] ?? "Leçon disponible."}</Body>
-          <RouteAction href={{ pathname: "/lesson/[id]", params: { id: lesson.id } }} label="Ouvrir la leçon" secondary />
+          <RouteAction href={{ pathname: "/lesson/[id]", params: { id: lesson.id } }} label="Ouvrir la leçon" accessibilityLabel={`Ouvrir la leçon : ${lesson.title}`} secondary />
         </Card>
       ))}
       <RouteAction href="/scales" label="Voir toutes les gammes" />

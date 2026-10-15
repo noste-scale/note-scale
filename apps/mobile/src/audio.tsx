@@ -5,6 +5,7 @@ import { View } from "react-native";
 import {
   orderedPitchSequence,
   playbackConfigurationKey,
+  playbackStatus,
   sampleKeyForPitch,
   scalePlaybackLabel,
   transitionPlayback,
@@ -251,9 +252,11 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
       <Action label="Arrêter" accessibilityLabel={scalePlaybackLabel("Arrêter", scaleLabel)} onPress={() => stop()} disabled={!active} />
     </Row>
   );
+  const statusText = playbackStatus(phase, message?.text);
+  const status = message ? <Notice danger={message.danger}>{statusText}</Notice> : <Body live>{statusText}</Body>;
 
   if (compact) {
-    return <View>{controls}{message ? <Notice danger={message.danger}>{message.text}</Notice> : null}</View>;
+    return <View>{controls}{message || active ? status : null}</View>;
   }
 
   return (
@@ -266,7 +269,7 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
       <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture"><Row><Action role="radio" label="Ascendante" onPress={() => configure("up", slow)} selected={direction === "up"} /><Action role="radio" label="Descendante" onPress={() => configure("down", slow)} selected={direction === "down"} /></Row></View>
       <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture"><Row><Action role="radio" label="Normale" onPress={() => configure(direction, false)} selected={!slow} /><Action role="radio" label="Lente" onPress={() => configure(direction, true)} selected={slow} /></Row></View>
       {controls}
-      {message ? <Notice danger={message.danger}>{message.text}</Notice> : <Body live>Lecture prête.</Body>}
+      {status}
     </Card>
   );
 }

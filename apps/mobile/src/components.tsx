@@ -48,16 +48,16 @@ export function Action({ label, accessibilityLabel, onPress, disabled = false, s
       onPress={onPress}
       style={({ pressed }) => [styles.action, { backgroundColor: selected ? theme.accent : theme.primary, opacity: disabled ? 0.45 : pressed ? 0.75 : 1 }]}
     >
-      <Text style={[styles.actionText, { color: selected ? "#182027" : theme.primaryText }]}>{label}</Text>
+      <Text style={[styles.actionText, { color: selected ? "#182027" : theme.primaryText }]}>{selected ? "✓ " : ""}{label}</Text>
     </Pressable>
   );
 }
 
-export function RouteAction({ label, href, secondary = false }: { label: string; href: Href; secondary?: boolean }) {
+export function RouteAction({ label, accessibilityLabel, href, secondary = false }: { label: string; accessibilityLabel?: string; href: Href; secondary?: boolean }) {
   const theme = useTheme();
   return (
     <Link href={href} asChild>
-      <Pressable accessibilityRole="link" style={({ pressed }) => [styles.action, { backgroundColor: secondary ? theme.surface : theme.primary, borderColor: theme.primary, borderWidth: secondary ? 2 : 0, opacity: pressed ? 0.75 : 1 }]}>
+      <Pressable accessibilityRole="link" accessibilityLabel={accessibilityLabel ?? label} style={({ pressed }) => [styles.action, { backgroundColor: secondary ? theme.surface : theme.primary, borderColor: theme.primary, borderWidth: secondary ? 2 : 0, opacity: pressed ? 0.75 : 1 }]}>
         <Text style={[styles.actionText, { color: secondary ? theme.primary : theme.primaryText }]}>{label}</Text>
       </Pressable>
     </Link>
@@ -68,8 +68,8 @@ export function Chip({ label, selected, onPress, disabled = false, role = "radio
   const theme = useTheme();
   const accessibilityState = role === "button" ? { disabled, selected } : { checked: selected, disabled };
   return (
-    <Pressable disabled={disabled} accessibilityRole={role} accessibilityState={accessibilityState} onPress={onPress} style={[styles.chip, { backgroundColor: selected ? theme.accent : theme.surface, borderColor: selected ? theme.accent : theme.border, opacity: disabled ? 0.6 : 1 }]}> 
-      <Text style={[styles.chipText, { color: selected ? "#182027" : theme.text }]}>{label}</Text>
+    <Pressable disabled={disabled} accessibilityRole={role} accessibilityLabel={label} accessibilityState={accessibilityState} onPress={onPress} style={[styles.chip, { backgroundColor: selected ? theme.accent : theme.surface, borderColor: selected ? theme.accent : theme.border, opacity: disabled ? 0.6 : 1 }]}>
+      <Text style={[styles.chipText, { color: selected ? "#182027" : theme.text }]}>{selected ? "✓ " : ""}{label}</Text>
     </Pressable>
   );
 }
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, gap: 12, padding: 18 },
   heading: { fontSize: 21, fontWeight: "700" },
   body: { fontSize: 16, lineHeight: 24 },
-  action: { alignItems: "center", borderRadius: 14, justifyContent: "center", minHeight: 50, paddingHorizontal: 18, paddingVertical: 12 },
+  action: { alignItems: "center", borderRadius: 14, flexShrink: 1, justifyContent: "center", maxWidth: "100%", minHeight: 50, paddingHorizontal: 18, paddingVertical: 12 },
   actionText: { fontSize: 16, fontWeight: "700", textAlign: "center" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: { borderRadius: 14, borderWidth: 2, flexShrink: 1, justifyContent: "center", maxWidth: "100%", minHeight: 48, minWidth: 76, paddingHorizontal: 14, paddingVertical: 10 },

@@ -13,7 +13,7 @@ export default function ScalesScreen() {
           <Body>{scale.notes.join(" – ")}</Body>
           <Body muted>{scale.keySignatureCount === 0 ? "Aucune altération" : `${scale.keySignatureCount} altération${scale.keySignatureCount > 1 ? "s" : ""} : ${scale.accidentals.join(", ")}`}</Body>
           <AudioControls notes={scale.notes} compact scaleLabel={scale.frenchName} />
-          <RouteAction href={{ pathname: "/scale/[id]", params: { id: scale.id } }} label="Voir la construction" />
+          <RouteAction href={{ pathname: "/scale/[id]", params: { id: scale.id } }} label="Voir la construction" accessibilityLabel={`Voir la construction de ${scale.frenchName}`} />
         </Card>
       ))}
       <RouteAction href="/generator" label="Ouvrir le générateur" secondary />
