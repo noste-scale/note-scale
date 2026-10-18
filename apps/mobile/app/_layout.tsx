@@ -18,6 +18,7 @@ function Navigation() {
         <Stack.Screen name="scale/[id]" options={{ title: "Détail de la gamme" }} />
         <Stack.Screen name="generator" options={{ title: "Générateur" }} />
         <Stack.Screen name="lesson/[id]" options={{ title: "Leçon" }} />
+        <Stack.Screen name="privacy" options={{ title: "Confidentialité" }} />
       </Stack>
     </ProgressProvider>
   );

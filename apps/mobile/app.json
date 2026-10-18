@@ -2,7 +2,8 @@
   "expo": {
     "name": "NoteScale",
     "slug": "notescale",
-    "version": "1.0.1",
+    "version": "1.0.3",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "scheme": "notescale",
     "userInterfaceStyle": "automatic",
@@ -13,9 +14,34 @@
     },
     "android": {
       "package": "app.notescale.mobile",
-      "versionCode": 2
+      "versionCode": 4,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#155E75"
+      }
     },
-    "plugins": ["expo-router", "expo-audio"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

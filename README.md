@@ -96,7 +96,10 @@ Progress uses a validated version-1 JSON envelope. The web adapter stores it in
 `localStorage`; the mobile adapter stores it on-device. Missing, incompatible,
 or corrupt payloads fall back to a usable in-memory state without overwriting
 unreadable or incompatible stored bytes. Storage failures produce a non-blocking French warning. Clearing browser/app data removes progress, and
-there is no cloud recovery or cross-device synchronization.
+NoteScale has no account-based cloud recovery or synchronization. Android system
+backup and device transfer may still apply according to the user's system settings.
+The Android privacy policy is available offline from Home → Confidentialité;
+its public-page source is `apps/web/public/privacy.html`.
 
 ## Offline behavior
 

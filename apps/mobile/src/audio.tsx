@@ -75,6 +75,8 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
   const phaseRef = useRef<PlaybackPhase>("stopped");
   const [direction, setDirection] = useState<"up" | "down">("up");
   const [slow, setSlow] = useState(false);
+  const [showPiano, setShowPiano] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [phase, setPhase] = useState<PlaybackPhase>("stopped");
   const [soundingPitch, setSoundingPitch] = useState<number>();
   const [message, setMessage] = useState<{ text: string; danger: boolean }>();
@@ -237,7 +239,7 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
     return () => {
       generation.current += 1;
       clearTimer();
-      player.pause();
+      // ponytail: useAudioPlayer already releases native audio; this cleanup owns only our JS work.
       if (activePlayback?.owner === owner.current) activePlayback = undefined;
     };
   }, [player]);
@@ -247,9 +249,9 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
   const pauseAction = phase === "paused" ? "Reprendre" : "Pause";
   const controls = (
     <Row>
-      <Action label={mainAction} accessibilityLabel={scalePlaybackLabel(mainAction, scaleLabel)} onPress={start} />
-      <Action label={pauseAction} accessibilityLabel={scalePlaybackLabel(pauseAction, scaleLabel)} onPress={phase === "paused" ? resume : pause} disabled={!active} />
-      <Action label="Arrêter" accessibilityLabel={scalePlaybackLabel("Arrêter", scaleLabel)} onPress={() => stop()} disabled={!active} />
+      <Action label={active ? pauseAction : mainAction} accessibilityLabel={scalePlaybackLabel(active ? pauseAction : mainAction, scaleLabel)} onPress={phase === "paused" ? resume : phase === "playing" ? pause : start} secondary={compact} />
+      {active ? <Action label="Arrêter" accessibilityLabel={scalePlaybackLabel("Arrêter", scaleLabel)} onPress={() => stop()} secondary /> : null}
+      {active ? <Action label="Recommencer" accessibilityLabel={scalePlaybackLabel("Recommencer", scaleLabel)} onPress={start} secondary /> : null}
     </Row>
   );
   const statusText = playbackStatus(phase, message?.text);
@@ -263,13 +265,17 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
     <Card>
       <Heading>Écouter la gamme</Heading>
       <Body muted>Lecture locale, sans connexion.</Body>
-      {piano ? <Piano activeNotes={notes} soundingPitch={soundingPitch} onPlayNote={playOne} /> : null}
-      <Body>Écouter une note</Body>
-      <Row>{notes.slice(0, 7).map((note, index) => <Action key={`${note}-${index}`} label={note} onPress={() => playOne(note)} hint={`Écouter la note ${note}`} />)}</Row>
-      <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture"><Row><Action role="radio" label="Ascendante" onPress={() => configure("up", slow)} selected={direction === "up"} /><Action role="radio" label="Descendante" onPress={() => configure("down", slow)} selected={direction === "down"} /></Row></View>
-      <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture"><Row><Action role="radio" label="Normale" onPress={() => configure(direction, false)} selected={!slow} /><Action role="radio" label="Lente" onPress={() => configure(direction, true)} selected={slow} /></Row></View>
       {controls}
       {status}
+      {piano && showPiano ? <Piano key={notes[0]} activeNotes={notes} soundingPitch={soundingPitch} onPlayNote={playOne} /> : <><Body>Écouter une note, depuis {notes[0]}</Body><Row>{notes.slice(0, 7).map((note, index) => <Action key={`${note}-${index}`} label={note} onPress={() => playOne(note)} hint={`Écouter la note ${note}`} selected={pitch(note) === soundingPitch} secondary />)}</Row></>}
+      {piano ? <Action label={showPiano ? "Revenir aux notes de la gamme" : "Afficher le piano"} expanded={showPiano} onPress={() => setShowPiano(!showPiano)} secondary /> : null}
+      <Action label={showSettings ? "Masquer les réglages d’écoute" : "Réglages d’écoute"} expanded={showSettings} onPress={() => setShowSettings(!showSettings)} secondary />
+      {showSettings ? <>
+        <Body>Sens de lecture</Body>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture"><Row><Action role="radio" label="Ascendante" onPress={() => configure("up", slow)} selected={direction === "up"} secondary /><Action role="radio" label="Descendante" onPress={() => configure("down", slow)} selected={direction === "down"} secondary /></Row></View>
+        <Body>Vitesse de lecture</Body>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture"><Row><Action role="radio" label="Normale" onPress={() => configure(direction, false)} selected={!slow} secondary /><Action role="radio" label="Lente" onPress={() => configure(direction, true)} selected={slow} secondary /></Row></View>
+      </> : null}
     </Card>
   );
 }

@@ -225,11 +225,11 @@ Vérifier : démarrage sans Metro, navigation, exercices, lecture audio, sauvega
 de progression après redémarrage et fonctionnement hors ligne. Ces contrôles
 restent à effectuer sur appareil ; les signatures ne les remplacent pas.
 
-Le manifeste compilé conserve les permissions de la configuration Expo actuelle,
-notamment `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW`, le service de lecture en
-arrière-plan et les permissions de stockage limitées à Android API 32. Cette
-compilation ne les modifie pas. Revoir leur nécessité avant publication : la
-présence d'une permission déclarée ne prouve pas que l'application l'utilise.
+Depuis la préparation 1.0.3, `app.json` désactive l'enregistrement et les services
+audio d'arrière-plan, et bloque les permissions de microphone, superposition,
+ancien stockage externe et services premier plan correspondants. Vérifier le
+manifeste compilé après chaque mise à jour Expo : le prébuild seul ne prouve pas
+le contenu du livrable final. Voir la [préparation Google Play](google-play.md).
 
 Si Android refuse une mise à jour pour signature incompatible, ne pas désinstaller
 l'application automatiquement : une désinstallation supprime ses données
