@@ -6,10 +6,10 @@ function configuredBase(value: string | undefined): string | undefined {
 }
 
 export function pagesBase(repository: string | undefined, actions: string | undefined, explicit: string | undefined = undefined): string {
-  const configured = configuredBase(explicit);
-  if (configured) return configured;
-  const name = repository?.split("/")[1];
-  return actions && name && !name.endsWith(".github.io") ? `/${name}/` : "/";
+  const configuredPath = configuredBase(explicit);
+  if (configuredPath) return configuredPath;
+  const repositoryName = repository?.split("/")[1];
+  return actions && repositoryName && !repositoryName.endsWith(".github.io") ? `/${repositoryName}/` : "/";
 }
 
 export function offlineWorkerSource(template: string, assets: readonly string[], base: string, cacheId: string): string {
@@ -20,17 +20,20 @@ export function offlineWorkerSource(template: string, assets: readonly string[],
 }
 
 export function watchWorkerFailures(registration: ServiceWorkerRegistration, onFailure: () => void): void {
-  const watch = (worker: ServiceWorker | null) => {
+  const watchWorker = (worker: ServiceWorker | null) => {
     if (!worker) return;
-    let reported = false;
-    const report = () => {
-      if (!reported && worker.state === "redundant") { reported = true; onFailure(); }
+    let hasReportedFailure = false;
+    const reportFailure = () => {
+      if (!hasReportedFailure && worker.state === "redundant") {
+        hasReportedFailure = true;
+        onFailure();
+      }
     };
-    report();
-    worker.addEventListener("statechange", report);
+    reportFailure();
+    worker.addEventListener("statechange", reportFailure);
   };
-  watch(registration.installing);
-  registration.addEventListener("updatefound", () => watch(registration.installing));
+  watchWorker(registration.installing);
+  registration.addEventListener("updatefound", () => watchWorker(registration.installing));
 }
 
 export function prepareOfflineRegistration(

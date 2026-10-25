@@ -5,34 +5,40 @@ import { createHash } from "node:crypto";
 import { join, relative } from "node:path";
 import { offlineWorkerSource, pagesBase } from "./src/pwa.ts";
 
-async function filesIn(directory: string): Promise<string[]> {
+async function listFilesIn(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   return (await Promise.all(entries.map(async (entry) => {
-    const path = join(directory, entry.name);
-    return entry.isDirectory() ? filesIn(path) : [path];
+    const entryPath = join(directory, entry.name);
+    return entry.isDirectory() ? listFilesIn(entryPath) : [entryPath];
   }))).flat();
 }
 
-function offlineWorker(base: string): Plugin {
+function createOfflineWorkerPlugin(base: string): Plugin {
   return {
     name: "notescale-offline-worker",
     apply: "build",
     async closeBundle() {
-      const directory = join(import.meta.dirname, "dist");
-      const files = (await filesIn(directory))
-        .filter((file) => relative(directory, file).replaceAll("\\", "/") !== "sw.js")
+      const buildDirectory = join(import.meta.dirname, "dist");
+      const buildFiles = (await listFilesIn(buildDirectory))
+        .filter((file) => relative(buildDirectory, file).replaceAll("\\", "/") !== "sw.js")
         .sort();
       const hash = createHash("sha256").update(`base:${base}\0`);
-      for (const file of files) hash.update(relative(directory, file).replaceAll("\\", "/")).update("\0").update(await readFile(file)).update("\0");
+      for (const file of buildFiles) {
+        hash.update(relative(buildDirectory, file).replaceAll("\\", "/"))
+          .update("\0")
+          .update(await readFile(file))
+          .update("\0");
+      }
       const cacheId = `notescale-${hash.digest("hex").slice(0, 16)}`;
-      const assets = files.map((file) => `${base}${relative(directory, file).replaceAll("\\", "/")}`);
-      const source = offlineWorkerSource(await readFile(new URL("./src/sw.ts", import.meta.url), "utf8"), assets, base, cacheId);
-      await writeFile(join(directory, "sw.js"), source);
+      const assets = buildFiles.map((file) => `${base}${relative(buildDirectory, file).replaceAll("\\", "/")}`);
+      const workerTemplate = await readFile(new URL("./src/sw.ts", import.meta.url), "utf8");
+      const workerSource = offlineWorkerSource(workerTemplate, assets, base, cacheId);
+      await writeFile(join(buildDirectory, "sw.js"), workerSource);
     },
   };
 }
 
 export default defineConfig(() => {
   const base = pagesBase(process.env.GITHUB_REPOSITORY, process.env.GITHUB_ACTIONS, process.env.VITE_BASE_PATH);
-  return { base, plugins: [react(), offlineWorker(base)] };
+  return { base, plugins: [react(), createOfflineWorkerPlugin(base)] };
 });

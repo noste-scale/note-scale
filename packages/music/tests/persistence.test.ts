@@ -28,12 +28,15 @@ describe("versioned local persistence", () => {
     [null, null, "missing", true],
     ["not-json", "Progression locale illisible", "unreadable", false],
     [JSON.stringify({ version: 0, attempts: [] }), "Progression locale incompatible", "incompatible", false],
-  ] as const)("falls back safely for missing, corrupt or old payload %s", (raw, warningStart, status, canSave) => {
-    const result = decodeProgress(raw);
-    expect(result.state).toEqual(createEmptyProgress());
-    if (warningStart) expect(result.warning).toContain(warningStart);
-    else expect(result.warning).toBeNull();
-    expect(result).toMatchObject({ status, canSave });
+  ] as const)("falls back safely for missing, corrupt or old payload %s", (storedPayload, warningPrefix, status, canSave) => {
+    const decodedProgress = decodeProgress(storedPayload);
+    expect(decodedProgress.state).toEqual(createEmptyProgress());
+    if (warningPrefix) {
+      expect(decodedProgress.warning).toContain(warningPrefix);
+    } else {
+      expect(decodedProgress.warning).toBeNull();
+    }
+    expect(decodedProgress).toMatchObject({ status, canSave });
   });
 
   it("keeps valid fields while dropping malformed records", () => {

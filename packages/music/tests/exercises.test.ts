@@ -12,7 +12,7 @@ import {
   type ExerciseType,
 } from "../src";
 
-function sequence(values: readonly number[]) {
+function createSequenceRandom(values: readonly number[]) {
   let index = 0;
   return () => values[index++ % values.length] ?? 0;
 }
@@ -37,7 +37,7 @@ describe("exercise generation and grading", () => {
 
   it.each(["C", "E", "Bb"] as const)("renders two answer-matched blanks for %s major", (scaleId) => {
     const scale = getMajorScale(scaleId);
-    const exercise = createExercise("complete-scale", scale, sequence([0.1, 0.8, 0.3]));
+    const exercise = createExercise("complete-scale", scale, createSequenceRandom([0.1, 0.8, 0.3]));
     const blankIndexes = exercise.promptNotes
       ?.map((note, index) => note === "___" ? index : -1)
       .filter((index) => index >= 0) ?? [];
@@ -47,10 +47,10 @@ describe("exercise generation and grading", () => {
 
   it.each(["C", "E", "Bb"] as const)("renders exactly one mutated note for %s major", (scaleId) => {
     const scale = getMajorScale(scaleId);
-    const exercise = createExercise("find-error", scale, sequence([0.2, 0.6, 0.4]));
-    const expected = scale.notes.map((note) => formatNote(note));
+    const exercise = createExercise("find-error", scale, createSequenceRandom([0.2, 0.6, 0.4]));
+    const expectedNotes = scale.notes.map((note) => formatNote(note));
     const changedIndexes = exercise.promptNotes
-      ?.map((note, index) => note !== expected[index] ? index : -1)
+      ?.map((note, index) => note !== expectedNotes[index] ? index : -1)
       .filter((index) => index >= 0) ?? [];
     expect(changedIndexes).toHaveLength(1);
     expect(exercise.correctAnswer).toEqual([scale.notes[changedIndexes[0]!]]);
@@ -58,14 +58,14 @@ describe("exercise generation and grading", () => {
 
   it("grades ordered answers per position and rejects enharmonic substitutions", () => {
     const exercise = createExercise("build-scale", getMajorScale("F#"), () => 0);
-    const correct = gradeExercise(exercise, [...exercise.correctAnswer]);
-    expect(correct).toMatchObject({ graded: true, correct: true, errors: [] });
+    const correctGrade = gradeExercise(exercise, [...exercise.correctAnswer]);
+    expect(correctGrade).toMatchObject({ graded: true, correct: true, errors: [] });
 
-    const enharmonic = [...exercise.correctAnswer];
-    enharmonic[6] = "F";
-    const wrong = gradeExercise(exercise, enharmonic);
-    expect(wrong.correct).toBe(false);
-    expect(wrong.errors).toEqual([expect.objectContaining({ index: 6, expected: "E#", actual: "F" })]);
+    const enharmonicAnswer = [...exercise.correctAnswer];
+    enharmonicAnswer[6] = "F";
+    const incorrectGrade = gradeExercise(exercise, enharmonicAnswer);
+    expect(incorrectGrade.correct).toBe(false);
+    expect(incorrectGrade.errors).toEqual([expect.objectContaining({ index: 6, expected: "E#", actual: "F" })]);
   });
 
   it("grades accidental sets without requiring order", () => {
@@ -88,9 +88,9 @@ describe("exercise generation and grading", () => {
   });
 
   it("is deterministic with an injected random source", () => {
-    const first = generateExercise(sequence([0.21, 0.41, 0.61]));
-    const second = generateExercise(sequence([0.21, 0.41, 0.61]));
-    expect(first).toEqual(second);
+    const firstExercise = generateExercise(createSequenceRandom([0.21, 0.41, 0.61]));
+    const secondExercise = generateExercise(createSequenceRandom([0.21, 0.41, 0.61]));
+    expect(firstExercise).toEqual(secondExercise);
   });
 
   it("builds a daily session with three distinct scales and prioritizes a wrong due scale", () => {
@@ -100,10 +100,10 @@ describe("exercise generation and grading", () => {
       { exerciseType: "build-scale", scaleId: "Eb", correct: false },
       new Date(now.getTime() - 20 * 60_000),
     );
-    const session = createDailySession(progress, sequence([0.8, 0.2, 0.6, 0.4, 0.1]), now);
-    const ids = session.scaleExercises.map((exercise) => exercise.scaleId);
-    expect(ids[0]).toBe("Eb");
-    expect(new Set(ids).size).toBe(3);
+    const session = createDailySession(progress, createSequenceRandom([0.8, 0.2, 0.6, 0.4, 0.1]), now);
+    const scaleIds = session.scaleExercises.map((exercise) => exercise.scaleId);
+    expect(scaleIds[0]).toBe("Eb");
+    expect(new Set(scaleIds).size).toBe(3);
     expect(session.naturalSemitoneQuestion.correctAnswer).toEqual(["demi-ton"]);
   });
 

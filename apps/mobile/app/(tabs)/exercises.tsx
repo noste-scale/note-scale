@@ -21,42 +21,42 @@ const kindLabels: Record<ExerciseView["kind"], string> = {
   "find-error": "Trouver l’erreur",
 };
 
-const emptyResponse = (exerciseId = ""): ExerciseResponse<GradeResult> => ({ exerciseId, selected: [] });
+const createEmptyResponse = (exerciseId = ""): ExerciseResponse<GradeResult> => ({ exerciseId, selected: [] });
 
 export default function ExercisesScreen() {
   const params = useLocalSearchParams<{ scaleId?: string | string[] }>();
   const routeScaleId = routeValue(params.scaleId);
   const scopedScaleId = routeScaleId && isTonicId(routeScaleId) ? routeScaleId : undefined;
   const { progress, hydrated, recordAttempt, warning } = useProgress();
-  const [daily, setDaily] = useState(false);
+  const [isDailySession, setDailySession] = useState(false);
   const [dailyExercises, setDailyExercises] = useState<ExerciseView[]>([]);
-  const [index, setIndex] = useState(0);
-  const [response, setResponse] = useState<ExerciseResponse<GradeResult>>(() => emptyResponse());
-  const recordedExercise = useRef<string | undefined>(undefined);
+  const [exerciseIndex, setExerciseIndex] = useState(0);
+  const [response, setResponse] = useState<ExerciseResponse<GradeResult>>(() => createEmptyResponse());
+  const lastRecordedExerciseId = useRef<string | undefined>(undefined);
   const exercise = useMemo(
     // ponytail: sample progress only when hydration/generation changes so recording cannot replace the exercise being graded.
-    () => daily ? dailyExercises[index] : makeExercise(index, scopedScaleId, Math.random, progress),
-    [daily, dailyExercises, hydrated, index, scopedScaleId],
+    () => isDailySession ? dailyExercises[exerciseIndex] : makeExercise(exerciseIndex, scopedScaleId, Math.random, progress),
+    [isDailySession, dailyExercises, hydrated, exerciseIndex, scopedScaleId],
   );
   const currentResponse = responseForExercise(response, exercise?.id ?? "");
   const selected = currentResponse.selected;
   const grade = currentResponse.grade;
-  const submitted = grade?.graded === true;
+  const isSubmitted = grade?.graded === true;
 
   useEffect(() => {
-    setResponse(emptyResponse(exercise?.id));
-    recordedExercise.current = undefined;
-  }, [daily, exercise?.id, scopedScaleId]);
+    setResponse(createEmptyResponse(exercise?.id));
+    lastRecordedExerciseId.current = undefined;
+  }, [isDailySession, exercise?.id, scopedScaleId]);
 
-  const choose = (option: string) => {
-    if (!exercise || submitted) return;
+  const selectAnswer = (option: string) => {
+    if (!exercise || isSubmitted) return;
     setResponse((current) => {
-      const active = responseForExercise(current, exercise.id);
+      const activeResponse = responseForExercise(current, exercise.id);
       return {
         exerciseId: exercise.id,
         selected: updateSelection(
           exercise.selectionMode,
-          active.selected,
+          activeResponse.selected,
           option,
           exercise.maximumSelections,
           exercise.noneOption,
@@ -65,46 +65,76 @@ export default function ExercisesScreen() {
     });
   };
 
-  const submit = () => {
+  const submitAnswer = () => {
     if (!hydrated || !exercise || selected.length === 0) return;
     const result = gradeSelection(exercise, selected);
     setResponse({ exerciseId: exercise.id, selected, grade: result });
-    const recording = attemptRecordingDecision(recordedExercise.current, exercise.id, result.graded);
-    recordedExercise.current = recording.lastRecordedExerciseId;
+    const recording = attemptRecordingDecision(lastRecordedExerciseId.current, exercise.id, result.graded);
+    lastRecordedExerciseId.current = recording.lastRecordedExerciseId;
     if (recording.record) {
       recordAttempt(exercise.scaleId, result.correct, exercise.kind);
     }
   };
 
-  const next = () => {
-    if (daily && index >= dailyExercises.length - 1) {
-      setDaily(false);
-      setIndex(0);
+  const advanceExercise = () => {
+    if (isDailySession && exerciseIndex >= dailyExercises.length - 1) {
+      setDailySession(false);
+      setExerciseIndex(0);
     } else {
-      setIndex((value) => value + 1);
+      setExerciseIndex((value) => value + 1);
     }
-    setResponse(emptyResponse());
-    recordedExercise.current = undefined;
+    setResponse(createEmptyResponse());
+    lastRecordedExerciseId.current = undefined;
   };
 
-  const startDaily = () => {
+  const startDailySession = () => {
     if (!hydrated) return;
     setDailyExercises(makeDailyExercises(progress));
-    setDaily(true);
-    setIndex(0);
-    setResponse(emptyResponse());
-    recordedExercise.current = undefined;
+    setDailySession(true);
+    setExerciseIndex(0);
+    setResponse(createEmptyResponse());
+    lastRecordedExerciseId.current = undefined;
   };
 
   const answerLabel = exercise?.selectionMode === "ordered" ? "Ta réponse ordonnée" : "Ta sélection";
-  const chipRole = exercise?.selectionMode === "single" ? "radio" : exercise?.selectionMode === "multiple" ? "checkbox" : "button";
+  let chipRole: "radio" | "checkbox" | "button" = "button";
+  if (exercise?.selectionMode === "single") chipRole = "radio";
+  else if (exercise?.selectionMode === "multiple") chipRole = "checkbox";
+
+  let subtitle = "Propose une réponse avant de voir la correction.";
+  if (isDailySession) {
+    subtitle = `Question ${exerciseIndex + 1} sur ${dailyExercises.length} · environ 3 à 5 minutes`;
+  } else if (scopedScaleId) {
+    subtitle = "Tous les prochains exercices restent liés à cette gamme.";
+  }
+
+  let validationHint = "Affiche ensuite la correction";
+  if (!hydrated) validationHint = "Attends le chargement de ta progression";
+  else if (selected.length === 0) validationHint = "Choisis d’abord une réponse";
+
+  let answerFeedback = "";
+  let correctionFeedback = "";
+  if (exercise && isSubmitted && grade) {
+    answerFeedback = grade.correct
+      ? "Bonne réponse. "
+      : `À corriger : tu as choisi « ${selected.join(" – ")} ». La réponse attendue est « ${displayGradeAnswer(grade.correctAnswer, exercise.kind)} ». `;
+    const errorMessages = grade.errors.map((error) => error.message).join(" ");
+    const errorSeparator = grade.errors.length ? " " : "";
+    correctionFeedback = `${errorMessages}${errorSeparator}${grade.explanation}\nRègle à retenir : ${grade.rule}`;
+  }
 
   return (
-    <Screen title={daily ? "Entraînement quotidien" : "Exercices"} subtitle={daily ? `Question ${index + 1} sur ${dailyExercises.length} · environ 3 à 5 minutes` : scopedScaleId ? "Tous les prochains exercices restent liés à cette gamme." : "Propose une réponse avant de voir la correction."}>
+    <Screen
+      title={isDailySession ? "Entraînement quotidien" : "Exercices"}
+      subtitle={subtitle}
+    >
       {warning ? <Notice danger>{warning}</Notice> : null}
       {!hydrated ? <Notice>Chargement de ta progression : la validation sera disponible ensuite.</Notice> : null}
-      {!daily ? <Action label="Lancer la session quotidienne" onPress={startDaily} disabled={!hydrated} /> : null}
-      {daily ? <Card><Heading>Rappel</Heading><Formula /></Card> : null}
+      {!isDailySession ? <Action label="Lancer la session quotidienne" onPress={startDailySession} disabled={!hydrated} /> : null}
+      {isDailySession ? <Card>
+        <Heading>Rappel</Heading>
+        <Formula />
+      </Card> : null}
       {exercise ? (
         <Card>
           <Body muted>Type : {kindLabels[exercise.kind]}</Body>
@@ -113,35 +143,49 @@ export default function ExercisesScreen() {
             accessibilityLabel="Choix de réponse"
             {...(chipRole === "radio" ? { accessibilityRole: "radiogroup" as const } : {})}
           >
-            <Row>{exercise.options.map((option) => (
-              <Chip
-                key={option}
-                label={option}
-                role={chipRole}
-                selected={exercise.selectionMode !== "ordered" && selected.includes(option)}
-                disabled={submitted}
-                onPress={() => choose(option)}
-              />
-            ))}</Row>
+            <Row>
+              {exercise.options.map((option) => (
+                <Chip
+                  key={option}
+                  label={option}
+                  role={chipRole}
+                  selected={exercise.selectionMode !== "ordered" && selected.includes(option)}
+                  disabled={isSubmitted}
+                  onPress={() => selectAnswer(option)}
+                />
+              ))}
+            </Row>
           </View>
           {selected.length ? <Body live>{answerLabel} : {selected.join(" – ")}</Body> : <Body muted>{exercise.selectionMode === "ordered" ? "Choisis les notes une à une, dans l’ordre." : "Aucun choix pour le moment."}</Body>}
-          {!submitted && selected.length ? (
+          {!isSubmitted && selected.length ? (
             <Row>
-              {exercise.selectionMode === "ordered" ? <Action label="Annuler la dernière note" onPress={() => setResponse({ exerciseId: exercise.id, selected: selected.slice(0, -1) })} /> : null}
-              <Action label="Effacer ma réponse" onPress={() => setResponse(emptyResponse(exercise.id))} />
+              {exercise.selectionMode === "ordered" ? <Action
+                label="Annuler la dernière note"
+                onPress={() => setResponse({ exerciseId: exercise.id, selected: selected.slice(0, -1) })}
+              /> : null}
+              <Action label="Effacer ma réponse" onPress={() => setResponse(createEmptyResponse(exercise.id))} />
             </Row>
           ) : null}
-          {!submitted ? <Action label="Valider ma réponse" onPress={submit} disabled={!hydrated || selected.length === 0} hint={!hydrated ? "Attends le chargement de ta progression" : selected.length === 0 ? "Choisis d’abord une réponse" : "Affiche ensuite la correction"} /> : null}
+          {!isSubmitted ? <Action
+            label="Valider ma réponse"
+            onPress={submitAnswer}
+            disabled={!hydrated || selected.length === 0}
+            hint={validationHint}
+          /> : null}
           {grade && !grade.graded ? <Notice danger>{grade.validationMessage ?? "Propose une réponse avant de valider."}</Notice> : null}
-          {submitted && grade ? (
+          {isSubmitted && grade ? (
             <Notice danger={!grade.correct}>
-              {grade.correct ? "Bonne réponse. " : `À corriger : tu as choisi « ${selected.join(" – ")} ». La réponse attendue est « ${displayGradeAnswer(grade.correctAnswer, exercise.kind)} ». `}
-              {grade.errors.map((error) => error.message).join(" ")}{grade.errors.length ? " " : ""}{grade.explanation}{"\n"}Règle à retenir : {grade.rule}
+              {answerFeedback}{correctionFeedback}
             </Notice>
           ) : null}
-          {submitted ? <Action label={daily && index === dailyExercises.length - 1 ? "Terminer la session" : "Question suivante"} onPress={next} /> : null}
+          {isSubmitted ? <Action
+            label={isDailySession && exerciseIndex === dailyExercises.length - 1 ? "Terminer la session" : "Question suivante"}
+            onPress={advanceExercise}
+          /> : null}
         </Card>
-      ) : <Card><Body>Les exercices seront disponibles dès que le catalogue musical sera chargé.</Body></Card>}
+      ) : <Card>
+        <Body>Les exercices seront disponibles dès que le catalogue musical sera chargé.</Body>
+      </Card>}
     </Screen>
   );
 }

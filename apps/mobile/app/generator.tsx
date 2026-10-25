@@ -4,43 +4,80 @@ import { Action, Body, Card, Chip, Formula, Heading, Row, Screen } from "../src/
 import { scales } from "../src/domain";
 
 export default function GeneratorScreen() {
-  const [selectedId, setSelectedId] = useState("C");
-  const [step, setStep] = useState(0);
-  const [showAll, setShowAll] = useState(false);
-  const [showWhy, setShowWhy] = useState(false);
-  const scale = scales.find((item) => item.id === selectedId);
-  const current = scale?.construction[step];
-  const lastStep = scale ? scale.construction.length - 1 : 0;
+  const [selectedScaleId, setSelectedScaleId] = useState("C");
+  const [stepIndex, setStepIndex] = useState(0);
+  const [showAllTonics, setShowAllTonics] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
+  const scale = scales.find((item) => item.id === selectedScaleId);
+  const constructionStep = scale?.construction[stepIndex];
+  const lastStepIndex = scale ? scale.construction.length - 1 : 0;
   return (
     <Screen nativeHeader subtitle="Pars d’une note, puis avance d’un intervalle à la fois.">
       <View style={{ gap: 12 }}>
         <Heading>Note de départ</Heading>
         <View accessibilityRole="radiogroup" accessibilityLabel="Note de départ de la gamme">
-          <Row>{scales.filter((item) => showAll || ["C", "G", "D", selectedId].includes(item.id)).map((item) => <Chip key={item.id} label={item.notes[0] ?? item.tonic} selected={item.id === selectedId} onPress={() => { setSelectedId(item.id); setStep(0); setShowWhy(false); }} />)}</Row>
+          <Row>
+            {scales.filter((item) => showAllTonics || ["C", "G", "D", selectedScaleId].includes(item.id)).map((item) => <Chip
+              key={item.id}
+              label={item.notes[0] ?? item.tonic}
+              selected={item.id === selectedScaleId}
+              onPress={() => {
+                setSelectedScaleId(item.id);
+                setStepIndex(0);
+                setShowExplanation(false);
+              }}
+            />)}
+          </Row>
         </View>
-        <Action label={showAll ? "Réduire le choix de notes" : "Voir les 15 notes de départ"} secondary expanded={showAll} onPress={() => setShowAll((value) => !value)} />
+        <Action
+          label={showAllTonics ? "Réduire le choix de notes" : "Voir les 15 notes de départ"}
+          secondary
+          expanded={showAllTonics}
+          onPress={() => setShowAllTonics((value) => !value)}
+        />
       </View>
-      {scale && current ? (
+      {scale && constructionStep ? (
         <Card>
           <Heading>{scale.frenchName}</Heading>
-          <Body live>Étape {step + 1} sur {scale.construction.length} : {current.currentNote} + {current.intervalLabel} → {current.result}</Body>
-          <Formula activeStep={step} />
-          <Body>{[scale.notes[0], ...scale.construction.slice(0, step + 1).map((item) => item.result)].join(" – ")}</Body>
-          {step === lastStep ? <Body>Gamme terminée : chaque lettre apparaît une fois, puis on retrouve la note de départ à l’octave.</Body> : null}
+          <Body live>Étape {stepIndex + 1} sur {scale.construction.length} : {constructionStep.currentNote} + {constructionStep.intervalLabel} → {constructionStep.result}</Body>
+          <Formula activeStep={stepIndex} />
+          <Body>{[scale.notes[0], ...scale.construction.slice(0, stepIndex + 1).map((item) => item.result)].join(" – ")}</Body>
+          {stepIndex === lastStepIndex ? <Body>Gamme terminée : chaque lettre apparaît une fois, puis on retrouve la note de départ à l’octave.</Body> : null}
           <Row>
-            <Action label="Étape précédente" secondary onPress={() => { setStep((value) => Math.max(0, value - 1)); setShowWhy(false); }} disabled={step === 0} />
-            <Action label={step === lastStep ? "Recommencer" : "Étape suivante"} onPress={() => { setStep((value) => value === lastStep ? 0 : value + 1); setShowWhy(false); }} />
+            <Action
+              label="Étape précédente"
+              secondary
+              onPress={() => {
+                setStepIndex((value) => Math.max(0, value - 1));
+                setShowExplanation(false);
+              }}
+              disabled={stepIndex === 0}
+            />
+            <Action
+              label={stepIndex === lastStepIndex ? "Recommencer" : "Étape suivante"}
+              onPress={() => {
+                setStepIndex((value) => value === lastStepIndex ? 0 : value + 1);
+                setShowExplanation(false);
+              }}
+            />
           </Row>
-          <Action label={showWhy ? "Masquer l’explication" : "Pourquoi cette note ?"} secondary expanded={showWhy} onPress={() => setShowWhy((value) => !value)} />
-          {showWhy ? (
+          <Action
+            label={showExplanation ? "Masquer l’explication" : "Pourquoi cette note ?"}
+            secondary
+            expanded={showExplanation}
+            onPress={() => setShowExplanation((value) => !value)}
+          />
+          {showExplanation ? (
             <View style={{ gap: 8 }}>
-              <Body>Note naturelle suivante : {current.naturalCandidate}</Body>
-              <Body>Altération nécessaire : {current.necessaryAlteration}</Body>
-              <Body>{current.explanation}</Body>
+              <Body>Note naturelle suivante : {constructionStep.naturalCandidate}</Body>
+              <Body>Altération nécessaire : {constructionStep.necessaryAlteration}</Body>
+              <Body>{constructionStep.explanation}</Body>
             </View>
           ) : null}
         </Card>
-      ) : <Card><Body>Catalogue musical indisponible.</Body></Card>}
+      ) : <Card>
+        <Body>Catalogue musical indisponible.</Body>
+      </Card>}
     </Screen>
   );
 }

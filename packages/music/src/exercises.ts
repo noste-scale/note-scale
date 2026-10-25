@@ -21,28 +21,28 @@ const TYPES: readonly ExerciseType[] = [
   "find-error",
 ];
 
-function randomIndex(length: number, rng: RandomSource): number {
+function chooseRandomIndex(length: number, rng: RandomSource): number {
   if (length <= 0) return 0;
   const value = rng();
-  const safe = Number.isFinite(value) ? Math.min(Math.max(value, 0), 0.999999999999) : 0;
-  return Math.floor(safe * length);
+  const boundedValue = Number.isFinite(value) ? Math.min(Math.max(value, 0), 0.999999999999) : 0;
+  return Math.floor(boundedValue * length);
 }
 
-function exerciseId(type: ExerciseType, scale: string, rng: RandomSource): string {
+function createExerciseId(type: ExerciseType, scale: string, rng: RandomSource): string {
   return `${type}-${scale}-${Math.floor(Math.max(0, rng()) * 1_000_000)}`;
 }
 
-function completeScale(scale: MajorScale, rng: RandomSource): Exercise {
-  const first = 1 + randomIndex(3, rng);
-  let second = 4 + randomIndex(3, rng);
-  if (second === first) second = Math.min(6, second + 1);
-  const gaps = [first, second].sort((a, b) => a - b);
-  const promptNotes = scale.notes.map((note, index) => (gaps.includes(index) ? "___" : formatNote(note)));
+function createCompleteScaleExercise(scale: MajorScale, rng: RandomSource): Exercise {
+  const firstGapIndex = 1 + chooseRandomIndex(3, rng);
+  let secondGapIndex = 4 + chooseRandomIndex(3, rng);
+  if (secondGapIndex === firstGapIndex) secondGapIndex = Math.min(6, secondGapIndex + 1);
+  const gapIndexes = [firstGapIndex, secondGapIndex].sort((left, right) => left - right);
+  const promptNotes = scale.notes.map((note, index) => (gapIndexes.includes(index) ? "___" : formatNote(note)));
   return {
-    id: exerciseId("complete-scale", scale.id, rng),
+    id: createExerciseId("complete-scale", scale.id, rng),
     type: "complete-scale",
     question: `Complète la gamme de ${scale.frenchName}.`,
-    correctAnswer: gaps.map((index) => scale.notes[index] ?? ""),
+    correctAnswer: gapIndexes.map((index) => scale.notes[index] ?? ""),
     explanation: `La gamme complète est ${scale.notes.map((note) => formatNote(note)).join(" – ")}.`,
     rule: RULE,
     scaleId: scale.id,
@@ -50,9 +50,9 @@ function completeScale(scale: MajorScale, rng: RandomSource): Exercise {
   };
 }
 
-function buildScale(scale: MajorScale, rng: RandomSource): Exercise {
+function createBuildScaleExercise(scale: MajorScale, rng: RandomSource): Exercise {
   return {
-    id: exerciseId("build-scale", scale.id, rng),
+    id: createExerciseId("build-scale", scale.id, rng),
     type: "build-scale",
     question: `Construis la gamme de ${scale.frenchName}.`,
     correctAnswer: scale.notes,
@@ -62,12 +62,14 @@ function buildScale(scale: MajorScale, rng: RandomSource): Exercise {
   };
 }
 
-function findAccidentals(scale: MajorScale, rng: RandomSource): Exercise {
-  const kind = scale.accidentalType === "flat" ? "bémols" : scale.accidentalType === "sharp" ? "dièses" : "altérations";
+function createFindAccidentalsExercise(scale: MajorScale, rng: RandomSource): Exercise {
+  let accidentalLabel = "altérations";
+  if (scale.accidentalType === "flat") accidentalLabel = "bémols";
+  else if (scale.accidentalType === "sharp") accidentalLabel = "dièses";
   return {
-    id: exerciseId("find-accidentals", scale.id, rng),
+    id: createExerciseId("find-accidentals", scale.id, rng),
     type: "find-accidentals",
-    question: `Quelles sont les ${kind} de ${scale.frenchName} ?`,
+    question: `Quelles sont les ${accidentalLabel} de ${scale.frenchName} ?`,
     correctAnswer: scale.accidentals.length === 0 ? ["aucune"] : scale.accidentals,
     explanation:
       scale.accidentals.length === 0
@@ -85,38 +87,39 @@ const INTERVAL_QUESTIONS = [
   { notes: ["D", "E"], answer: "ton", explanation: "Ré à Mi couvre deux demi-tons." },
 ] as const;
 
-function identifyInterval(rng: RandomSource): Exercise {
-  const item = INTERVAL_QUESTIONS[randomIndex(INTERVAL_QUESTIONS.length, rng)] ?? INTERVAL_QUESTIONS[0];
+function createIdentifyIntervalExercise(rng: RandomSource): Exercise {
+  const intervalQuestion = INTERVAL_QUESTIONS[chooseRandomIndex(INTERVAL_QUESTIONS.length, rng)] ?? INTERVAL_QUESTIONS[0];
   return {
-    id: exerciseId("identify-interval", item.notes.join(""), rng),
+    id: createExerciseId("identify-interval", intervalQuestion.notes.join(""), rng),
     type: "identify-interval",
-    question: `Quel intervalle se trouve entre ${formatNote(item.notes[0])} et ${formatNote(item.notes[1])} ?`,
-    correctAnswer: [item.answer],
-    explanation: item.explanation,
+    question: `Quel intervalle se trouve entre ${formatNote(intervalQuestion.notes[0])} et ${formatNote(intervalQuestion.notes[1])} ?`,
+    correctAnswer: [intervalQuestion.answer],
+    explanation: intervalQuestion.explanation,
     rule: "Mi–Fa et Si–Do sont les deux demi-tons naturels.",
     options: ["ton", "demi-ton"],
   };
 }
 
-function findError(scale: MajorScale, rng: RandomSource): Exercise {
-  const alteredIndexes = scale.notes
+function createFindErrorExercise(scale: MajorScale, rng: RandomSource): Exercise {
+  const alteredNotes = scale.notes
     .slice(1, 7)
     .map((note, index) => ({ note, index: index + 1 }))
     .filter(({ note }) => note.endsWith("#") || note.endsWith("b"));
-  const fallbackIndex = 1 + randomIndex(6, rng);
-  const target = alteredIndexes[randomIndex(alteredIndexes.length, rng)] ?? {
+  const fallbackIndex = 1 + chooseRandomIndex(6, rng);
+  const noteToCorrect = alteredNotes[chooseRandomIndex(alteredNotes.length, rng)] ?? {
     note: scale.notes[fallbackIndex] ?? scale.notes[1] ?? "D",
     index: fallbackIndex,
   };
-  const wrong = (target.note.endsWith("#") || target.note.endsWith("b") ? target.note[0] ?? "C" : `${target.note}#`) as NoteId;
+  const noteHasAccidental = noteToCorrect.note.endsWith("#") || noteToCorrect.note.endsWith("b");
+  const incorrectNote = (noteHasAccidental ? noteToCorrect.note[0] ?? "C" : `${noteToCorrect.note}#`) as NoteId;
   const promptNotes = [...scale.notes];
-  promptNotes[target.index] = wrong;
+  promptNotes[noteToCorrect.index] = incorrectNote;
   return {
-    id: exerciseId("find-error", scale.id, rng),
+    id: createExerciseId("find-error", scale.id, rng),
     type: "find-error",
     question: `Trouve et corrige l’erreur dans cette gamme de ${scale.frenchName}.`,
-    correctAnswer: [target.note],
-    explanation: `${formatNote(wrong)} doit devenir ${formatNote(target.note)}.`,
+    correctAnswer: [noteToCorrect.note],
+    explanation: `${formatNote(incorrectNote)} doit devenir ${formatNote(noteToCorrect.note)}.`,
     rule: RULE,
     scaleId: scale.id,
     promptNotes: promptNotes.map((note) => formatNote(note)),
@@ -126,21 +129,21 @@ function findError(scale: MajorScale, rng: RandomSource): Exercise {
 export function createExercise(type: ExerciseType, scale: MajorScale, rng: RandomSource = Math.random): Exercise {
   switch (type) {
     case "complete-scale":
-      return completeScale(scale, rng);
+      return createCompleteScaleExercise(scale, rng);
     case "build-scale":
-      return buildScale(scale, rng);
+      return createBuildScaleExercise(scale, rng);
     case "find-accidentals":
-      return findAccidentals(scale, rng);
+      return createFindAccidentalsExercise(scale, rng);
     case "identify-interval":
-      return identifyInterval(rng);
+      return createIdentifyIntervalExercise(rng);
     case "find-error":
-      return findError(scale, rng);
+      return createFindErrorExercise(scale, rng);
   }
 }
 
 export function generateExercise(rng: RandomSource = Math.random, type?: ExerciseType, scale?: MajorScale): Exercise {
-  const selectedType = type ?? TYPES[randomIndex(TYPES.length, rng)] ?? "complete-scale";
-  const selectedScale = scale ?? MAJOR_SCALES[randomIndex(MAJOR_SCALES.length, rng)] ?? MAJOR_SCALES[0];
+  const selectedType = type ?? TYPES[chooseRandomIndex(TYPES.length, rng)] ?? "complete-scale";
+  const selectedScale = scale ?? MAJOR_SCALES[chooseRandomIndex(MAJOR_SCALES.length, rng)] ?? MAJOR_SCALES[0];
   if (!selectedScale) throw new Error("No major scales are available");
   return createExercise(selectedType, selectedScale, rng);
 }
@@ -154,9 +157,12 @@ function normalizeAnswer(value: unknown): string | null {
 }
 
 export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult {
-  const raw = Array.isArray(answer) ? answer : typeof answer === "string" ? [answer] : [];
-  const normalized = raw.map(normalizeAnswer);
-  if (normalized.length === 0 || normalized.some((item) => item === null)) {
+  let answerItems: unknown[] = [];
+  if (Array.isArray(answer)) answerItems = answer;
+  else if (typeof answer === "string") answerItems = [answer];
+  const normalizedAnswer = answerItems.map(normalizeAnswer);
+  const hasInvalidAnswer = normalizedAnswer.length === 0 || normalizedAnswer.some((item) => item === null);
+  if (hasInvalidAnswer) {
     return {
       graded: false,
       correct: false,
@@ -168,26 +174,26 @@ export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult 
     };
   }
 
-  const expected = exercise.correctAnswer.map((item) => normalizeAnswer(item) ?? item);
-  const actual = normalized as string[];
-  const unordered = exercise.type === "find-accidentals";
+  const expectedAnswer = exercise.correctAnswer.map((item) => normalizeAnswer(item) ?? item);
+  const actualAnswer = normalizedAnswer as string[];
+  const answerOrderDoesNotMatter = exercise.type === "find-accidentals";
   const errors = [];
 
-  if (unordered) {
-    const actualSet = new Set(actual);
-    const expectedSet = new Set(expected);
+  if (answerOrderDoesNotMatter) {
+    const actualSet = new Set(actualAnswer);
+    const expectedSet = new Set(expectedAnswer);
     for (const item of expectedSet) {
       if (!actualSet.has(item)) errors.push({ expected: item, message: `${formatNote(item)} manque.` });
     }
     for (const item of actualSet) {
       if (!expectedSet.has(item)) errors.push({ actual: item, message: `${formatNote(item)} n’appartient pas à l’armure.` });
     }
-    if (actual.length !== actualSet.size) errors.push({ message: "Une altération a été répétée." });
+    if (actualAnswer.length !== actualSet.size) errors.push({ message: "Une altération a été répétée." });
   } else {
-    const length = Math.max(actual.length, expected.length);
-    for (let index = 0; index < length; index += 1) {
-      const expectedItem = expected[index];
-      const actualItem = actual[index];
+    const answerLength = Math.max(actualAnswer.length, expectedAnswer.length);
+    for (let index = 0; index < answerLength; index += 1) {
+      const expectedItem = expectedAnswer[index];
+      const actualItem = actualAnswer[index];
       if (actualItem !== expectedItem) {
         errors.push({
           index,
@@ -215,7 +221,7 @@ export function createDailySession(
   now: Date = new Date(),
 ): DailySession {
   const scales = selectReviewScales(progress, 3, rng, now);
-  const naturalSemitoneQuestion = identifyInterval(() => (rng() < 0.5 ? 0 : 0.25));
+  const naturalSemitoneQuestion = createIdentifyIntervalExercise(() => (rng() < 0.5 ? 0 : 0.25));
   const scaleTypes: readonly ExerciseType[] = ["complete-scale", "build-scale", "find-accidentals"];
   return {
     id: `daily-${localDateKey(now)}`,

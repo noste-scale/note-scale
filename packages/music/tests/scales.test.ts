@@ -10,7 +10,7 @@ import {
   type TonicId,
 } from "../src";
 
-const GOLDEN: Readonly<Record<TonicId, readonly string[]>> = {
+const EXPECTED_SCALE_NOTES: Readonly<Record<TonicId, readonly string[]>> = {
   C: ["C", "D", "E", "F", "G", "A", "B", "C"],
   G: ["G", "A", "B", "C", "D", "E", "F#", "G"],
   D: ["D", "E", "F#", "G", "A", "B", "C#", "D"],
@@ -29,9 +29,9 @@ const GOLDEN: Readonly<Record<TonicId, readonly string[]>> = {
 };
 
 describe("major-scale generation", () => {
-  for (const [tonic, expected] of Object.entries(GOLDEN) as [TonicId, readonly string[]][]) {
+  for (const [tonic, expectedNotes] of Object.entries(EXPECTED_SCALE_NOTES) as [TonicId, readonly string[]][]) {
     it(`spells ${tonic} major canonically`, () => {
-      expect(getMajorScale(tonic).notes).toEqual(expected);
+      expect(getMajorScale(tonic).notes).toEqual(expectedNotes);
     });
   }
 
@@ -39,9 +39,9 @@ describe("major-scale generation", () => {
     for (const scale of MAJOR_SCALES) {
       expect(new Set(scale.notes.slice(0, 7).map((note) => note[0])).size).toBe(7);
       const distances = scale.notes.slice(0, -1).map((note, index) => {
-        const next = scale.notes[index + 1];
-        if (!next) throw new Error("missing note");
-        return (pitchClassOf(next) - pitchClassOf(note) + 12) % 12;
+        const nextNote = scale.notes[index + 1];
+        if (!nextNote) throw new Error("missing note");
+        return (pitchClassOf(nextNote) - pitchClassOf(note) + 12) % 12;
       });
       expect(distances).toEqual(MAJOR_INTERVALS);
       expect(scale.notes.at(-1)).toBe(scale.tonic);

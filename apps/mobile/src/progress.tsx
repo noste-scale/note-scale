@@ -48,45 +48,48 @@ export function ProgressProvider({ children }: PropsWithChildren) {
   const progressRef = useRef(progress);
   const hydratedRef = useRef(false);
   const canSaveRef = useRef(false);
-  const pendingRef = useRef<PendingAttempt[]>([]);
+  const pendingAttemptsRef = useRef<PendingAttempt[]>([]);
   const mountedRef = useRef(true);
-  const save = useRef(createSerializedSaver(
+  const saveProgress = useRef(createSerializedSaver(
     (snapshot: ProgressState) => safeSaveProgress(storage, snapshot),
     STORAGE_OPERATION_TIMEOUT_MS,
   )).current;
   // ponytail: a bookmark, not lesson completion; exercise progress stays untouched.
-  const saveLesson = useRef(createSerializedSaver(
+  const saveLessonBookmark = useRef(createSerializedSaver(
     (id: string) => AsyncStorage.setItem("notescale.lesson.v1", id),
     STORAGE_OPERATION_TIMEOUT_MS,
   )).current;
 
-  const persist = useCallback((snapshot: ProgressState) => {
+  const persistProgress = useCallback((snapshot: ProgressState) => {
     if (!canSaveRef.current) return;
-    void save(snapshot).then((saveWarning) => {
+    void saveProgress(snapshot).then((saveWarning) => {
       if (mountedRef.current) setWarning(persistenceWarningAfterSave(saveWarning));
     }).catch(() => {
       if (mountedRef.current) setWarning("La progression ne peut pas être enregistrée sur cet appareil.");
     });
-  }, [save]);
+  }, [saveProgress]);
 
   useEffect(() => {
     let active = true;
     mountedRef.current = true;
     loadProgressWithRetry(() => safeLoadProgress(storage)).then((result) => {
       if (!active) return;
-      const pending = pendingRef.current;
-      pendingRef.current = [];
-      const hydration = resolveHydration(result, pending);
+      const pendingAttempts = pendingAttemptsRef.current;
+      pendingAttemptsRef.current = [];
+      const hydration = resolveHydration(result, pendingAttempts);
       progressRef.current = hydration.progress;
       canSaveRef.current = result.canSave;
       hydratedRef.current = true;
       setProgress(hydration.progress);
       setWarning(result.warning ?? undefined);
       setHydrated(true);
-      if (hydration.shouldSave) persist(hydration.progress);
+      if (hydration.shouldSave) persistProgress(hydration.progress);
     });
-    return () => { active = false; mountedRef.current = false; };
-  }, [persist]);
+    return () => {
+      active = false;
+      mountedRef.current = false;
+    };
+  }, [persistProgress]);
 
   useEffect(() => {
     let active = true;
@@ -95,43 +98,59 @@ export function ProgressProvider({ children }: PropsWithChildren) {
       if (active && revision === lessonRevision.current && id && lessons.some((lesson) => lesson.id === id)) setLastLessonId(id);
     }).catch(() => {
       if (active && revision === lessonRevision.current) setLessonWarning("La dernière leçon n’a pas pu être retrouvée. Tu peux toujours choisir une leçon.");
-    }).finally(() => { if (active) setLessonHydrated(true); });
-    return () => { active = false; };
+    }).finally(() => {
+      if (active) setLessonHydrated(true);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const rememberLesson = useCallback((id: string) => {
     if (!lessons.some((lesson) => lesson.id === id)) return;
     const revision = ++lessonRevision.current;
     setLastLessonId(id);
-    void saveLesson(id).then(() => {
+    void saveLessonBookmark(id).then(() => {
       if (mountedRef.current && revision === lessonRevision.current) setLessonWarning(undefined);
     }).catch(() => {
       if (mountedRef.current && revision === lessonRevision.current) setLessonWarning("La reprise de cette leçon n’a pas été enregistrée. Les leçons restent accessibles.");
     });
-  }, [saveLesson]);
+  }, [saveLessonBookmark]);
 
   const recordAttempt = useCallback((scaleId: string | undefined, correct: boolean, exerciseType: ExerciseType) => {
-    const pending: PendingAttempt = { input: {
-      exerciseType,
-      ...(scaleId && isTonicId(scaleId) ? { scaleId } : {}),
-      correct,
-    }, at: new Date() };
+    const pendingAttempt: PendingAttempt = {
+      input: {
+        exerciseType,
+        ...(scaleId && isTonicId(scaleId) ? { scaleId } : {}),
+        correct,
+      },
+      at: new Date()
+    };
     if (!hydratedRef.current) {
-      pendingRef.current.push(pending);
+      pendingAttemptsRef.current.push(pendingAttempt);
       return;
     }
-    const next = applyAttempt(progressRef.current, pending.input, pending.at);
-    progressRef.current = next;
-    setProgress(next);
-    persist(next);
-  }, [persist]);
+    const updatedProgress = applyAttempt(progressRef.current, pendingAttempt.input, pendingAttempt.at);
+    progressRef.current = updatedProgress;
+    setProgress(updatedProgress);
+    persistProgress(updatedProgress);
+  }, [persistProgress]);
 
   const value = useMemo<ProgressContextValue>(() => ({
-    progress, hydrated, ...(warning ? { warning } : {}), recordAttempt,
-    ...(lastLessonId ? { lastLessonId } : {}), lessonHydrated,
-    ...(lessonWarning ? { lessonWarning } : {}), rememberLesson,
+    progress,
+    hydrated,
+    ...(warning ? { warning } : {}),
+    recordAttempt,
+    ...(lastLessonId ? { lastLessonId } : {}),
+    lessonHydrated,
+    ...(lessonWarning ? { lessonWarning } : {}),
+    rememberLesson,
   }), [hydrated, progress, recordAttempt, warning, lastLessonId, lessonHydrated, lessonWarning, rememberLesson]);
-  return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>;
+  return (
+    <ProgressContext.Provider value={value}>
+      {children}
+    </ProgressContext.Provider>
+  );
 }
 
 export function useProgress(): ProgressContextValue {

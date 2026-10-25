@@ -30,9 +30,9 @@ function previousLocalDateKey(date: Date): string {
 }
 
 function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
+  const futureDate = new Date(date);
+  futureDate.setDate(futureDate.getDate() + days);
+  return futureDate;
 }
 
 function updateReview(previous: ReviewRecord | undefined, scaleId: TonicId, correct: boolean, now: Date): ReviewRecord {
@@ -50,21 +50,23 @@ export function recordAttempt(
   rng: RandomSource = Math.random,
 ): ProgressState {
   const latestTimestamp = state.attempts.reduce((latest, attempt) => {
-    const parsed = validDate(attempt.answeredAt)?.getTime();
-    return parsed === undefined ? latest : Math.max(latest, parsed);
+    const answeredTimestamp = parseValidDate(attempt.answeredAt)?.getTime();
+    return answeredTimestamp === undefined ? latest : Math.max(latest, answeredTimestamp);
   }, Number.NEGATIVE_INFINITY);
   const requestedTimestamp = now.getTime();
-  const effectiveTimestamp = Number.isFinite(requestedTimestamp)
-    ? Math.max(requestedTimestamp, latestTimestamp + 1)
-    : Number.isFinite(latestTimestamp)
-      ? latestTimestamp + 1
-      : Date.now();
+  let effectiveTimestamp: number;
+  if (Number.isFinite(requestedTimestamp)) {
+    effectiveTimestamp = Math.max(requestedTimestamp, latestTimestamp + 1);
+  } else if (Number.isFinite(latestTimestamp)) {
+    effectiveTimestamp = latestTimestamp + 1;
+  } else {
+    effectiveTimestamp = Date.now();
+  }
   const effectiveNow = new Date(effectiveTimestamp);
   const answeredAt = effectiveNow.toISOString();
   const randomValue = rng();
-  const nonce = Math.floor(
-    (Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 0.9999999999999999) : 0) * Number.MAX_SAFE_INTEGER,
-  )
+  const boundedRandomValue = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 0.9999999999999999) : 0;
+  const nonce = Math.floor(boundedRandomValue * Number.MAX_SAFE_INTEGER)
     .toString(36)
     .padStart(11, "0");
   const attempt: Attempt = {
@@ -84,28 +86,31 @@ export function recentScaleAttempts(state: ProgressState, scaleId: TonicId, limi
 }
 
 export function isScaleMastered(state: ProgressState, scaleId: TonicId): boolean {
-  const recent = recentScaleAttempts(state, scaleId, 6);
-  return recent.length === 6 && recent.filter((attempt) => attempt.correct).length >= 5 && recent.at(-1)?.correct === true;
+  const recentAttempts = recentScaleAttempts(state, scaleId, 6);
+  if (recentAttempts.length !== 6) return false;
+  const correctAttemptCount = recentAttempts.filter((attempt) => attempt.correct).length;
+  return correctAttemptCount >= 5 && recentAttempts.at(-1)?.correct === true;
 }
 
-function validDate(value: string): Date | null {
+function parseValidDate(value: string): Date | null {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 export function isScaleDue(state: ProgressState, scaleId: TonicId, now: Date = new Date()): boolean {
-  const record = state.reviews[scaleId];
-  const due = record ? validDate(record.dueAt) : null;
-  return Boolean(due && due.getTime() <= now.getTime());
+  const review = state.reviews[scaleId];
+  const dueDate = review ? parseValidDate(review.dueAt) : null;
+  return Boolean(dueDate && dueDate.getTime() <= now.getTime());
 }
 
 export function summarizeProgress(state: ProgressState, now: Date = new Date()): ProgressSummary {
   const correct = state.attempts.filter((attempt) => attempt.correct).length;
   const mastered = MAJOR_SCALES.filter((scale) => isScaleMastered(state, scale.id)).map((scale) => scale.id);
-  const practiced = new Set(state.attempts.flatMap((attempt) => (attempt.scaleId ? [attempt.scaleId] : [])));
-  const toReview = MAJOR_SCALES.filter(
-    (scale) => isScaleDue(state, scale.id, now) || (practiced.has(scale.id) && !state.reviews[scale.id] && !mastered.includes(scale.id)),
-  ).map((scale) => scale.id);
+  const practicedScales = new Set(state.attempts.flatMap((attempt) => (attempt.scaleId ? [attempt.scaleId] : [])));
+  const toReview = MAJOR_SCALES.filter((scale) => {
+    if (isScaleDue(state, scale.id, now)) return true;
+    return practicedScales.has(scale.id) && !state.reviews[scale.id] && !mastered.includes(scale.id);
+  }).map((scale) => scale.id);
   const today = localDateKey(now);
   const yesterday = previousLocalDateKey(now);
   const streak = state.lastTrainingDate === today || state.lastTrainingDate === yesterday ? state.streak : 0;
@@ -119,7 +124,7 @@ export function summarizeProgress(state: ProgressState, now: Date = new Date()):
   };
 }
 
-function weakness(state: ProgressState, scaleId: TonicId): number {
+function calculateWeakness(state: ProgressState, scaleId: TonicId): number {
   const attempts = recentScaleAttempts(state, scaleId, 6);
   if (attempts.length === 0) return -1;
   return 1 - attempts.filter((attempt) => attempt.correct).length / attempts.length;
@@ -131,37 +136,48 @@ export function selectReviewScales(
   rng: RandomSource = Math.random,
   now: Date = new Date(),
 ): readonly MajorScale[] {
-  const ranked = MAJOR_SCALES.map((scale, catalogIndex) => {
-    const record = state.reviews[scale.id];
-    const due = record ? validDate(record.dueAt) : null;
-    const dueNow = Boolean(due && due.getTime() <= now.getTime());
+  const rankedScales = MAJOR_SCALES.map((scale, catalogIndex) => {
+    const review = state.reviews[scale.id];
+    const dueDate = review ? parseValidDate(review.dueAt) : null;
+    const isDueNow = Boolean(dueDate && dueDate.getTime() <= now.getTime());
     const attempts = recentScaleAttempts(state, scale.id, 6);
-    const unseen = attempts.length === 0;
-    const unscheduled = !record || !due;
+    const isUnseen = attempts.length === 0;
+    const isUnscheduled = !review || !dueDate;
     const randomValue = rng();
+    let priorityBand = 2;
+    if (isDueNow || (!isUnseen && isUnscheduled)) priorityBand = 0;
+    else if (isUnseen) priorityBand = 1;
+    let reviewDateSortKey: number;
+    if (isDueNow) reviewDateSortKey = dueDate?.getTime() ?? 0;
+    else if (isUnseen) reviewDateSortKey = 0;
+    else reviewDateSortKey = dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
     return {
       scale,
-      band: dueNow || (!unseen && unscheduled) ? 0 : unseen ? 1 : 2,
-      score: dueNow ? due?.getTime() ?? 0 : unseen ? 0 : due?.getTime() ?? Number.MAX_SAFE_INTEGER,
-      weakness: weakness(state, scale.id),
-      random: Number.isFinite(randomValue) ? randomValue : 0,
+      priorityBand,
+      reviewDateSortKey,
+      weakness: calculateWeakness(state, scale.id),
+      randomTieBreaker: Number.isFinite(randomValue) ? randomValue : 0,
       catalogIndex,
     };
   });
-  ranked.sort((left, right) =>
-    left.band - right.band || left.score - right.score || right.weakness - left.weakness || left.random - right.random || left.catalogIndex - right.catalogIndex,
+  rankedScales.sort((left, right) =>
+    left.priorityBand - right.priorityBand ||
+    left.reviewDateSortKey - right.reviewDateSortKey ||
+    right.weakness - left.weakness ||
+    left.randomTieBreaker - right.randomTieBreaker ||
+    left.catalogIndex - right.catalogIndex,
   );
   const safeCount = Number.isFinite(count) && count > 0 ? Math.min(Math.floor(count), MAJOR_SCALES.length) : 0;
-  return ranked.slice(0, safeCount).map(({ scale }) => scale);
+  return rankedScales.slice(0, safeCount).map(({ scale }) => scale);
 }
 
-function attemptIdentity(attempt: Attempt): string {
+function createAttemptIdentity(attempt: Attempt): string {
   return [attempt.id, attempt.exerciseType, attempt.scaleId ?? "", attempt.correct ? "1" : "0", attempt.answeredAt].join("|");
 }
 
 function compareAttempts(left: Attempt, right: Attempt): number {
-  const leftTime = validDate(left.answeredAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-  const rightTime = validDate(right.answeredAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const leftTime = parseValidDate(left.answeredAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const rightTime = parseValidDate(right.answeredAt)?.getTime() ?? Number.MAX_SAFE_INTEGER;
   return leftTime - rightTime || left.answeredAt.localeCompare(right.answeredAt) || left.id.localeCompare(right.id);
 }
 
@@ -172,7 +188,7 @@ export interface AttemptNormalization {
 }
 
 export function normalizeProgressAttempts(input: readonly Attempt[]): AttemptNormalization {
-  const byId = new Map<string, Attempt>();
+  const attemptsById = new Map<string, Attempt>();
   let duplicateCount = 0;
   let outOfOrder = false;
 
@@ -181,16 +197,16 @@ export function normalizeProgressAttempts(input: readonly Attempt[]): AttemptNor
     const previousInput = input[index - 1];
     if (attempt && previousInput && compareAttempts(previousInput, attempt) > 0) outOfOrder = true;
     if (!attempt) continue;
-    const previous = byId.get(attempt.id);
-    if (previous) {
+    const existingAttemptWithSameId = attemptsById.get(attempt.id);
+    if (existingAttemptWithSameId) {
       duplicateCount += 1;
-      if (attemptIdentity(attempt) < attemptIdentity(previous)) byId.set(attempt.id, attempt);
+      if (createAttemptIdentity(attempt) < createAttemptIdentity(existingAttemptWithSameId)) attemptsById.set(attempt.id, attempt);
     } else {
-      byId.set(attempt.id, attempt);
+      attemptsById.set(attempt.id, attempt);
     }
   }
 
-  return { attempts: [...byId.values()].sort(compareAttempts), duplicateCount, outOfOrder };
+  return { attempts: [...attemptsById.values()].sort(compareAttempts), duplicateCount, outOfOrder };
 }
 
 export function rebuildProgressFromAttempts(input: readonly Attempt[]): ProgressState {
@@ -200,7 +216,7 @@ export function rebuildProgressFromAttempts(input: readonly Attempt[]): Progress
   let lastTrainingDate: string | null = null;
 
   for (const attempt of attempts) {
-    const answeredAt = validDate(attempt.answeredAt);
+    const answeredAt = parseValidDate(attempt.answeredAt);
     if (!answeredAt) continue;
     if (attempt.scaleId) {
       reviews[attempt.scaleId] = updateReview(reviews[attempt.scaleId], attempt.scaleId, attempt.correct, answeredAt);

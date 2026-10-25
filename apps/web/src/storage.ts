@@ -21,13 +21,16 @@ export interface BrowserStorageUpdate extends PersistenceResult {
   needsSave: boolean;
 }
 
-function browserStorage(storage?: BrowserStorage): BrowserStorage | undefined {
+function resolveBrowserStorage(storage?: BrowserStorage): BrowserStorage | undefined {
   if (storage) return storage;
-  try { return window.localStorage; }
-  catch { return undefined; }
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
-function unavailable(): PersistenceResult {
+function createUnavailableProgress(): PersistenceResult {
   return {
     state: createEmptyProgress(),
     warning: "La progression locale n’a pas pu être lue.",
@@ -36,30 +39,33 @@ function unavailable(): PersistenceResult {
   };
 }
 
-function read(storage: BrowserStorage | undefined): PersistenceResult {
-  if (!storage) return unavailable();
-  try { return decodeProgress(storage.getItem(PROGRESS_STORAGE_KEY)); }
-  catch { return unavailable(); }
+function readStoredProgress(storage: BrowserStorage | undefined): PersistenceResult {
+  if (!storage) return createUnavailableProgress();
+  try {
+    return decodeProgress(storage.getItem(PROGRESS_STORAGE_KEY));
+  } catch {
+    return createUnavailableProgress();
+  }
 }
 
 export function loadBrowserProgress(storage?: BrowserStorage): Promise<PersistenceResult> {
-  return Promise.resolve(read(browserStorage(storage)));
+  return Promise.resolve(readStoredProgress(resolveBrowserStorage(storage)));
 }
 
 export function saveBrowserProgress(state: ProgressState, storage?: BrowserStorage): Promise<BrowserSaveResult> {
-  const target = browserStorage(storage);
-  const stored = read(target);
-  if (!target || !stored.canSave) {
-    return Promise.resolve({ state, warning: stored.warning, saved: false });
+  const targetStorage = resolveBrowserStorage(storage);
+  const storedProgress = readStoredProgress(targetStorage);
+  if (!targetStorage || !storedProgress.canSave) {
+    return Promise.resolve({ state, warning: storedProgress.warning, saved: false });
   }
 
-  const merged = mergeProgressStates(stored.state, state);
+  const mergedProgress = mergeProgressStates(storedProgress.state, state);
   try {
-    target.setItem(PROGRESS_STORAGE_KEY, encodeProgress(merged));
-    return Promise.resolve({ state: merged, warning: stored.warning, saved: true });
+    targetStorage.setItem(PROGRESS_STORAGE_KEY, encodeProgress(mergedProgress));
+    return Promise.resolve({ state: mergedProgress, warning: storedProgress.warning, saved: true });
   } catch {
     return Promise.resolve({
-      state: merged,
+      state: mergedProgress,
       warning: "La progression ne peut pas être enregistrée sur cet appareil.",
       saved: false,
     });
@@ -67,10 +73,10 @@ export function saveBrowserProgress(state: ProgressState, storage?: BrowserStora
 }
 
 export function mergeStorageUpdate(current: ProgressState, raw: string | null): PersistenceResult {
-  const incoming = decodeProgress(raw);
-  return incoming.canSave
-    ? { ...incoming, state: mergeProgressStates(current, incoming.state) }
-    : { ...incoming, state: current };
+  const incomingProgress = decodeProgress(raw);
+  return incomingProgress.canSave
+    ? { ...incomingProgress, state: mergeProgressStates(current, incomingProgress.state) }
+    : { ...incomingProgress, state: current };
 }
 
 export function storageEventUpdate(
@@ -79,13 +85,15 @@ export function storageEventUpdate(
   raw: string | null,
 ): BrowserStorageUpdate | undefined {
   if (key !== null && key !== PROGRESS_STORAGE_KEY) return undefined;
-  if (raw === null) return { ...decodeProgress(null), state: createEmptyProgress(), reset: true, needsSave: false };
-  const incoming = decodeProgress(raw);
-  const state = incoming.canSave ? mergeProgressStates(current, incoming.state) : current;
+  if (raw === null) {
+    return { ...decodeProgress(null), state: createEmptyProgress(), reset: true, needsSave: false };
+  }
+  const incomingProgress = decodeProgress(raw);
+  const state = incomingProgress.canSave ? mergeProgressStates(current, incomingProgress.state) : current;
   return {
-    ...incoming,
+    ...incomingProgress,
     state,
     reset: false,
-    needsSave: incoming.canSave && encodeProgress(state) !== encodeProgress(incoming.state),
+    needsSave: incomingProgress.canSave && encodeProgress(state) !== encodeProgress(incomingProgress.state),
   };
 }

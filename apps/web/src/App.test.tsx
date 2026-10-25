@@ -5,13 +5,17 @@ import { LESSONS, MAJOR_SCALES, createEmptyProgress, createExercise, recordAttem
 import App, { ExerciseCard, ProgressContext, ProgressPage } from "./App";
 import { getScale } from "./domain";
 
-function render(path: string): string {
-  return renderToStaticMarkup(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>);
+function renderRoute(path: string): string {
+  return renderToStaticMarkup(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+    </MemoryRouter>,
+  );
 }
 
 describe("web route states", () => {
   it("keeps primary navigation before main content on desktop while retaining one mobile tab bar", () => {
-    const html = render("/");
+    const html = renderRoute("/");
     expect(html.match(/aria-label="Navigation principale"/g)).toHaveLength(1);
     expect(html.indexOf("Navigation principale")).toBeLessThan(html.indexOf("id=\"contenu\""));
     expect(html).toContain('<button type="button" class="skip"');
@@ -20,10 +24,12 @@ describe("web route states", () => {
   });
 
   it("renders the shared lesson catalog with complete interval guidance", () => {
-    const html = render("/apprendre");
+    const html = renderRoute("/apprendre");
     for (const lesson of LESSONS) {
       expect(html).toContain(lesson.title.replace(/^\d+\.\s*/, ""));
-      for (const paragraph of lesson.paragraphs) expect(html).toContain(paragraph);
+      for (const paragraph of lesson.paragraphs) {
+        expect(html).toContain(paragraph);
+      }
     }
     expect(html).toContain("Do–Ré : ton");
     expect(html).toContain("Après Mi, il faut un ton");
@@ -32,35 +38,35 @@ describe("web route states", () => {
   });
 
   it("shows loading rather than empty statistics before progress hydration", () => {
-    const html = render("/progression");
+    const html = renderRoute("/progression");
     expect(html).toContain("Lecture des données locales");
     expect(html).not.toContain("class=\"stats\"");
   });
 
   it("renders explicit non-crashing states for invalid query and route input", () => {
-    expect(render("/exercices?gamme=H")).toContain("La gamme « H » n’est pas prise en charge");
-    expect(render("/exercices?gamme=")).toContain("Le paramètre de gamme est vide");
-    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(() => render("/gammes/%E0%A4%A")).not.toThrow();
-    expect(render("/gammes/%E0%A4%A")).toContain("Page introuvable");
-    warning.mockRestore();
+    expect(renderRoute("/exercices?gamme=H")).toContain("La gamme « H » n’est pas prise en charge");
+    expect(renderRoute("/exercices?gamme=")).toContain("Le paramètre de gamme est vide");
+    const consoleWarning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(() => renderRoute("/gammes/%E0%A4%A")).not.toThrow();
+    expect(renderRoute("/gammes/%E0%A4%A")).toContain("Page introuvable");
+    consoleWarning.mockRestore();
   });
 
   it("renders canonical flat black-key labels on a flat-key page", () => {
-    const html = render("/gammes/Db");
+    const html = renderRoute("/gammes/Db");
     expect(html).toContain("Écouter Ré♭");
     expect(html).toContain("Écouter Si♭");
     expect(html).not.toContain("Écouter Do♯");
   });
 
   it("gives compact audio controls unique scale-aware labels", () => {
-    const html = render("/gammes");
+    const html = renderRoute("/gammes");
     expect(html).toContain("Écouter Do majeur");
     expect(html).toContain("Écouter Sol majeur");
   });
 
   it("names each catalog destination without changing its visible label", () => {
-    const html = render("/gammes");
+    const html = renderRoute("/gammes");
     for (const scale of MAJOR_SCALES) {
       expect(html).toContain(`aria-label="Détails de ${getScale(scale.id)!.frenchName}" href="/gammes/${encodeURIComponent(scale.id)}"`);
     }
@@ -68,8 +74,8 @@ describe("web route states", () => {
   });
 
   it("keeps formula groups intact and exposes one labeled exercise selector", () => {
-    expect(render("/")).toContain('<span>T · T · ½</span><span><b aria-hidden="true">|</b> T · T · T · ½</span>');
-    const html = render("/exercices");
+    expect(renderRoute("/")).toContain('<span>T · T · ½</span><span><b aria-hidden="true">|</b> T · T · T · ½</span>');
+    const html = renderRoute("/exercices");
     expect(html).toContain('Type d’exercice<select');
     expect(html.match(/<option /g)).toHaveLength(5);
     expect(html.match(/selected=""/g)).toHaveLength(1);
@@ -80,7 +86,9 @@ describe("web route states", () => {
   it("renders native radio rows without text-entry help and describes text answers", () => {
     for (const type of ["identify-interval", "build-scale"] as const) {
       const exercise = createExercise(type, MAJOR_SCALES[0]!, () => 0);
-      const html = renderToStaticMarkup(<ExerciseCard scale={getScale("C")!} exercise={exercise} />);
+      const html = renderToStaticMarkup(
+        <ExerciseCard scale={getScale("C")!} exercise={exercise} />,
+      );
       if (exercise.options) {
         expect(html).toContain('<legend>Ta réponse</legend>');
         expect(html.match(/type="radio"/g)).toHaveLength(exercise.options.length);
@@ -98,14 +106,28 @@ describe("web route states", () => {
   it("offers an empty-progress continuation and uses singular and plural count labels", () => {
     const now = new Date();
     let progress = createEmptyProgress();
-    for (let attempts = 0; attempts <= 2; attempts += 1) {
-      const html = renderToStaticMarkup(<MemoryRouter><ProgressContext.Provider value={{ progress, ready: true, record: () => undefined }}><ProgressPage /></ProgressContext.Provider></MemoryRouter>);
-      expect(html).toContain(`<b>${attempts}</b><span>${attempts === 1 ? "exercice" : "exercices"}</span>`);
-      expect(html).toContain(`<b>${attempts}</b><span>${attempts === 1 ? "bonne réponse" : "bonnes réponses"}</span>`);
-      expect(html).toContain(attempts === 0 ? '<b>0</b><span>jours de suite</span>' : '<b>1</b><span>jour de suite</span>');
-      if (attempts === 0) expect(html).toContain('href="/exercices"');
-      else expect(html).not.toContain("Ta première gamme t’attend");
-      progress = recordAttempt(progress, { scaleId: "C", exerciseType: "build-scale", correct: true }, now, () => attempts / 3);
+    for (let attemptCount = 0; attemptCount <= 2; attemptCount += 1) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <ProgressContext.Provider value={{ progress, ready: true, record: () => undefined }}>
+            <ProgressPage />
+          </ProgressContext.Provider>
+        </MemoryRouter>,
+      );
+      expect(html).toContain(`<b>${attemptCount}</b><span>${attemptCount === 1 ? "exercice" : "exercices"}</span>`);
+      expect(html).toContain(`<b>${attemptCount}</b><span>${attemptCount === 1 ? "bonne réponse" : "bonnes réponses"}</span>`);
+      expect(html).toContain(attemptCount === 0 ? '<b>0</b><span>jours de suite</span>' : '<b>1</b><span>jour de suite</span>');
+      if (attemptCount === 0) {
+        expect(html).toContain('href="/exercices"');
+      } else {
+        expect(html).not.toContain("Ta première gamme t’attend");
+      }
+      progress = recordAttempt(
+        progress,
+        { scaleId: "C", exerciseType: "build-scale", correct: true },
+        now,
+        () => attemptCount / 3,
+      );
     }
   });
 });

@@ -4,19 +4,38 @@ import { useProgress } from "../../src/progress";
 import { useThemePreference } from "../../src/theme";
 
 export default function HomeScreen() {
-  const { progress, warning, lastLessonId, lessonHydrated, lessonWarning } = useProgress();
+  const {
+    progress,
+    warning,
+    lastLessonId,
+    lessonHydrated,
+    lessonWarning
+  } = useProgress();
   const { preference, cyclePreference } = useThemePreference();
-  const correct = progress.attempts.filter((attempt) => attempt.correct).length;
-  const resumeLesson = lessons.find((lesson) => lesson.id === lastLessonId);
-  const nextLesson = resumeLesson ?? lessons[0]!;
+  const correctAttemptCount = progress.attempts.filter((attempt) => attempt.correct).length;
+  const bookmarkedLesson = lessons.find((lesson) => lesson.id === lastLessonId);
+  const nextLesson = bookmarkedLesson ?? lessons[0]!;
+  let lessonIntroduction = "Préparation de ta reprise…";
+  if (lessonHydrated) {
+    lessonIntroduction = bookmarkedLesson
+      ? "Reprends la dernière leçon ouverte, à ton rythme."
+      : "Commence par les sept notes, puis construis ta première gamme.";
+  }
+  let themeLabel = "sombre";
+  if (preference === "system") themeLabel = "automatique";
+  else if (preference === "light") themeLabel = "clair";
   return (
     <Screen title="NoteScale" subtitle="Apprends à construire toutes les gammes majeures avec une seule formule.">
       {warning ? <Notice danger>{warning}</Notice> : null}
       {lessonWarning ? <Notice danger>{lessonWarning}</Notice> : null}
       <Card>
         <Heading>{lessonHydrated ? nextLesson.title : "Ton parcours"}</Heading>
-        <Body>{lessonHydrated ? resumeLesson ? "Reprends la dernière leçon ouverte, à ton rythme." : "Commence par les sept notes, puis construis ta première gamme." : "Préparation de ta reprise…"}</Body>
-        {lessonHydrated ? <RouteAction href={{ pathname: "/lesson/[id]", params: { id: nextLesson.id } }} label={resumeLesson ? "Continuer la leçon" : "Commencer"} accessibilityLabel={`${resumeLesson ? "Continuer" : "Commencer"} : ${nextLesson.title}`} /> : null}
+        <Body>{lessonIntroduction}</Body>
+        {lessonHydrated ? <RouteAction
+          href={{ pathname: "/lesson/[id]", params: { id: nextLesson.id } }}
+          label={bookmarkedLesson ? "Continuer la leçon" : "Commencer"}
+          accessibilityLabel={`${bookmarkedLesson ? "Continuer" : "Commencer"} : ${nextLesson.title}`}
+        /> : null}
       </Card>
       <RouteAction href="/(tabs)/learn" label="Choisir une leçon" secondary />
       <Row>
@@ -28,8 +47,13 @@ export default function HomeScreen() {
         <Formula />
         <Body muted>Mi–Fa et Si–Do sont collés.</Body>
       </Card>
-      <Action label={`Thème : ${preference === "system" ? "automatique" : preference === "light" ? "clair" : "sombre"}`} onPress={cyclePreference} hint="Bascule entre automatique, clair et sombre" secondary />
-      {progress.attempts.length ? <Body muted>{correct} bonnes réponses sur {progress.attempts.length} exercices.</Body> : null}
+      <Action
+        label={`Thème : ${themeLabel}`}
+        onPress={cyclePreference}
+        hint="Bascule entre automatique, clair et sombre"
+        secondary
+      />
+      {progress.attempts.length ? <Body muted>{correctAttemptCount} bonnes réponses sur {progress.attempts.length} exercices.</Body> : null}
       <RouteAction href="/privacy" label="Confidentialité" secondary />
     </Screen>
   );

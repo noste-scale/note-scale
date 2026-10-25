@@ -17,7 +17,7 @@ import {
 import { Action, Body, Card, Heading, Notice, Piano, Row } from "./components";
 
 interface ActivePlayback {
-  owner: symbol;
+  playbackOwner: symbol;
   preempt: () => void;
 }
 
@@ -51,214 +51,250 @@ const samples: Record<SampleKey, number> = {
   B5: require("../assets/audio/B5.wav"),
 };
 
-function pitch(note: string): number | undefined {
+function pitchClassForNote(note: string): number | undefined {
   const id = normalizeNoteId(note);
   return id ? pitchClassOf(id) : undefined;
 }
 
-function sequenceFor(notes: readonly string[], direction: "up" | "down"): SequencedPitch[] {
+function createPitchSequence(notes: readonly string[], direction: "up" | "down"): SequencedPitch[] {
   return orderedPitchSequence(notes.flatMap((note) => {
-    const value = pitch(note);
-    return value === undefined ? [] : [value];
+    const pitchClass = pitchClassForNote(note);
+    return pitchClass === undefined ? [] : [pitchClass];
   }), direction);
 }
 
-export function AudioControls({ notes, compact = false, piano = false, scaleLabel }: { notes: string[]; compact?: boolean; piano?: boolean; scaleLabel?: string }) {
+export function AudioControls({
+  notes,
+  compact = false,
+  piano = false,
+  scaleLabel,
+}: {
+  notes: string[];
+  compact?: boolean;
+  piano?: boolean;
+  scaleLabel?: string;
+}) {
   const player = useAudioPlayer(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const deadline = useRef(0);
-  const remaining = useRef(0);
-  const currentIndex = useRef(0);
-  const sequence = useRef<SequencedPitch[]>([]);
-  const generation = useRef(0);
-  const owner = useRef(Symbol("notescale-audio"));
-  const phaseRef = useRef<PlaybackPhase>("stopped");
+  const playbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const noteDeadline = useRef(0);
+  const remainingNoteDuration = useRef(0);
+  const currentNoteIndex = useRef(0);
+  const pitchSequence = useRef<SequencedPitch[]>([]);
+  const playbackGeneration = useRef(0);
+  const playbackOwner = useRef(Symbol("notescale-audio"));
+  const playbackPhaseRef = useRef<PlaybackPhase>("stopped");
   const [direction, setDirection] = useState<"up" | "down">("up");
   const [slow, setSlow] = useState(false);
   const [showPiano, setShowPiano] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [phase, setPhase] = useState<PlaybackPhase>("stopped");
+  const [playbackPhase, setPlaybackPhase] = useState<PlaybackPhase>("stopped");
   const [soundingPitch, setSoundingPitch] = useState<number>();
-  const [message, setMessage] = useState<{ text: string; danger: boolean }>();
+  const [playbackMessage, setPlaybackMessage] = useState<{ text: string; danger: boolean }>();
   const configurationKey = playbackConfigurationKey(notes, direction, slow);
-  const previousConfiguration = useRef(configurationKey);
+  const previousConfigurationKey = useRef(configurationKey);
 
   const updatePhase = (event: PlaybackEvent) => {
-    const next = transitionPlayback(phaseRef.current, event);
-    phaseRef.current = next;
-    setPhase(next);
+    const nextPhase = transitionPlayback(playbackPhaseRef.current, event);
+    playbackPhaseRef.current = nextPhase;
+    setPlaybackPhase(nextPhase);
   };
 
-  const clearTimer = () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = undefined;
+  const clearPlaybackTimer = () => {
+    if (playbackTimer.current) clearTimeout(playbackTimer.current);
+    playbackTimer.current = undefined;
   };
 
   const releaseOwnership = () => {
-    if (activePlayback?.owner === owner.current) activePlayback = undefined;
+    if (activePlayback?.playbackOwner === playbackOwner.current) activePlayback = undefined;
   };
 
   const resetPlayer = () => {
-    generation.current += 1;
-    clearTimer();
-    remaining.current = 0;
-    currentIndex.current = 0;
-    sequence.current = [];
+    playbackGeneration.current += 1;
+    clearPlaybackTimer();
+    remainingNoteDuration.current = 0;
+    currentNoteIndex.current = 0;
+    pitchSequence.current = [];
     player.pause();
     void player.seekTo(0).catch(() => undefined);
     setSoundingPitch(undefined);
     releaseOwnership();
   };
 
-  const stop = (event: "stop" | "preempt" = "stop") => {
+  const stopPlayback = (event: "stop" | "preempt" = "stop") => {
     resetPlayer();
     updatePhase(event);
-    setMessage({
+    setPlaybackMessage({
       text: event === "preempt" ? "Lecture interrompue par une autre lecture." : "Lecture arrêtée.",
       danger: false,
     });
   };
 
-  const complete = (token: number) => {
-    if (token !== generation.current) return;
-    clearTimer();
-    remaining.current = 0;
+  const completePlayback = (playbackToken: number) => {
+    if (playbackToken !== playbackGeneration.current) return;
+    clearPlaybackTimer();
+    remainingNoteDuration.current = 0;
     setSoundingPitch(undefined);
     updatePhase("complete");
-    setMessage({ text: "Lecture terminée.", danger: false });
+    setPlaybackMessage({ text: "Lecture terminée.", danger: false });
     releaseOwnership();
   };
 
-  const playAt = (index: number, token: number) => {
-    if (token !== generation.current) return;
-    const entry = sequence.current[index];
-    const source = entry ? samples[entry.sampleKey] : undefined;
-    if (!entry || source === undefined) {
+  const playNoteAtIndex = (index: number, playbackToken: number) => {
+    if (playbackToken !== playbackGeneration.current) return;
+    const sequencedPitch = pitchSequence.current[index];
+    const sampleSource = sequencedPitch ? samples[sequencedPitch.sampleKey] : undefined;
+    if (!sequencedPitch || sampleSource === undefined) {
       resetPlayer();
       updatePhase("stop");
-      setMessage({ text: "Cette note ne peut pas être lue. Réessaie avec une autre gamme.", danger: true });
+      setPlaybackMessage({ text: "Cette note ne peut pas être lue. Réessaie avec une autre gamme.", danger: true });
       return;
     }
     try {
-      currentIndex.current = index;
-      player.replace(source);
+      currentNoteIndex.current = index;
+      player.replace(sampleSource);
       player.setPlaybackRate(slow ? 0.75 : 1);
       player.play();
-      setSoundingPitch(entry.pitchClass);
-      const delay = slow ? 1100 : 650;
-      remaining.current = delay;
-      deadline.current = Date.now() + delay;
-      timer.current = setTimeout(() => {
-        if (index + 1 < sequence.current.length) playAt(index + 1, token);
-        else complete(token);
-      }, delay);
+      setSoundingPitch(sequencedPitch.pitchClass);
+      const noteDurationMs = slow ? 1100 : 650;
+      remainingNoteDuration.current = noteDurationMs;
+      noteDeadline.current = Date.now() + noteDurationMs;
+      playbackTimer.current = setTimeout(() => {
+        if (index + 1 < pitchSequence.current.length) playNoteAtIndex(index + 1, playbackToken);
+        else completePlayback(playbackToken);
+      }, noteDurationMs);
     } catch {
       resetPlayer();
       updatePhase("stop");
-      setMessage({ text: "La lecture a échoué. Les autres contrôles restent disponibles.", danger: true });
+      setPlaybackMessage({ text: "La lecture a échoué. Les autres contrôles restent disponibles.", danger: true });
     }
   };
 
   const startSequence = (nextSequence: SequencedPitch[], restart: boolean) => {
-    if (activePlayback?.owner !== owner.current) activePlayback?.preempt();
+    if (activePlayback?.playbackOwner !== playbackOwner.current) activePlayback?.preempt();
     resetPlayer();
     if (nextSequence.length === 0) {
       updatePhase("stop");
-      setMessage({ text: "Aucune note lisible n’est disponible.", danger: true });
+      setPlaybackMessage({ text: "Aucune note lisible n’est disponible.", danger: true });
       return;
     }
-    sequence.current = nextSequence;
-    activePlayback = { owner: owner.current, preempt: () => stop("preempt") };
-    setMessage(undefined);
+    pitchSequence.current = nextSequence;
+    activePlayback = { playbackOwner: playbackOwner.current, preempt: () => stopPlayback("preempt") };
+    setPlaybackMessage(undefined);
     updatePhase(restart ? "restart" : "start");
-    const token = generation.current;
-    playAt(0, token);
+    const playbackToken = playbackGeneration.current;
+    playNoteAtIndex(0, playbackToken);
   };
 
-  const start = () => startSequence(sequenceFor(notes, direction), phaseRef.current !== "stopped");
+  const startPlayback = () => startSequence(createPitchSequence(notes, direction), playbackPhaseRef.current !== "stopped");
 
-  const playOne = (note: string) => {
-    const value = pitch(note);
-    const sampleKey = value === undefined ? undefined : sampleKeyForPitch(value, 4);
-    if (value === undefined || !sampleKey) {
-      setMessage({ text: "Cette note ne peut pas être lue.", danger: true });
+  const playSingleNote = (note: string) => {
+    const pitchClass = pitchClassForNote(note);
+    const sampleKey = pitchClass === undefined ? undefined : sampleKeyForPitch(pitchClass, 4);
+    if (pitchClass === undefined || !sampleKey) {
+      setPlaybackMessage({ text: "Cette note ne peut pas être lue.", danger: true });
       return;
     }
-    startSequence([{ pitchClass: value, octave: 4, sampleKey }], phaseRef.current !== "stopped");
+    startSequence([{ pitchClass, octave: 4, sampleKey }], playbackPhaseRef.current !== "stopped");
   };
 
-  const pause = () => {
-    if (phaseRef.current !== "playing") return;
-    remaining.current = Math.max(0, deadline.current - Date.now());
-    clearTimer();
+  const pausePlayback = () => {
+    if (playbackPhaseRef.current !== "playing") return;
+    remainingNoteDuration.current = Math.max(0, noteDeadline.current - Date.now());
+    clearPlaybackTimer();
     player.pause();
     updatePhase("pause");
-    setMessage({ text: "Lecture en pause.", danger: false });
+    setPlaybackMessage({ text: "Lecture en pause.", danger: false });
   };
 
-  const resume = () => {
-    if (phaseRef.current !== "paused") return;
+  const resumePlayback = () => {
+    if (playbackPhaseRef.current !== "paused") return;
     try {
       player.play();
       updatePhase("resume");
-      setMessage(undefined);
-      const token = generation.current;
-      const delay = remaining.current;
-      deadline.current = Date.now() + delay;
-      timer.current = setTimeout(() => {
-        const index = currentIndex.current;
-        if (index + 1 < sequence.current.length) playAt(index + 1, token);
-        else complete(token);
-      }, delay);
+      setPlaybackMessage(undefined);
+      const playbackToken = playbackGeneration.current;
+      const noteDurationMs = remainingNoteDuration.current;
+      noteDeadline.current = Date.now() + noteDurationMs;
+      playbackTimer.current = setTimeout(() => {
+        const index = currentNoteIndex.current;
+        if (index + 1 < pitchSequence.current.length) playNoteAtIndex(index + 1, playbackToken);
+        else completePlayback(playbackToken);
+      }, noteDurationMs);
     } catch {
-      stop();
-      setMessage({ text: "La reprise de la lecture a échoué.", danger: true });
+      stopPlayback();
+      setPlaybackMessage({ text: "La reprise de la lecture a échoué.", danger: true });
     }
   };
 
-  const configure = (nextDirection: "up" | "down", nextSlow: boolean) => {
+  const configurePlayback = (nextDirection: "up" | "down", nextSlow: boolean) => {
     if (nextDirection === direction && nextSlow === slow) return;
-    if (phaseRef.current === "playing" || phaseRef.current === "paused") stop();
+    if (playbackPhaseRef.current === "playing" || playbackPhaseRef.current === "paused") stopPlayback();
     setDirection(nextDirection);
     setSlow(nextSlow);
   };
 
   useEffect(() => {
-    if (previousConfiguration.current === configurationKey) return;
-    previousConfiguration.current = configurationKey;
-    if (phaseRef.current !== "stopped") {
+    if (previousConfigurationKey.current === configurationKey) return;
+    previousConfigurationKey.current = configurationKey;
+    if (playbackPhaseRef.current !== "stopped") {
       resetPlayer();
       updatePhase("stop");
-      setMessage({ text: "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse.", danger: false });
+      setPlaybackMessage({
+        text: "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse.",
+        danger: false
+      });
     }
   }, [configurationKey]);
 
   useEffect(() => {
     audioModeSetup ??= setAudioModeAsync({ playsInSilentMode: true });
-    void audioModeSetup.catch(() => setMessage({ text: "L’audio local est indisponible sur cet appareil.", danger: true }));
+    void audioModeSetup.catch(() => setPlaybackMessage({ text: "L’audio local est indisponible sur cet appareil.", danger: true }));
     return () => {
-      generation.current += 1;
-      clearTimer();
+      playbackGeneration.current += 1;
+      clearPlaybackTimer();
       // ponytail: useAudioPlayer already releases native audio; this cleanup owns only our JS work.
-      if (activePlayback?.owner === owner.current) activePlayback = undefined;
+      if (activePlayback?.playbackOwner === playbackOwner.current) activePlayback = undefined;
     };
   }, [player]);
 
-  const active = phase === "playing" || phase === "paused";
-  const mainAction = active || phase === "completed" || phase === "preempted" ? "Recommencer" : "Lire";
-  const pauseAction = phase === "paused" ? "Reprendre" : "Pause";
+  const isPlaybackActive = playbackPhase === "playing" || playbackPhase === "paused";
+  const mainAction = isPlaybackActive || playbackPhase === "completed" || playbackPhase === "preempted" ? "Recommencer" : "Lire";
+  const pauseAction = playbackPhase === "paused" ? "Reprendre" : "Pause";
+  let handleMainAction = startPlayback;
+  if (playbackPhase === "paused") handleMainAction = resumePlayback;
+  else if (playbackPhase === "playing") handleMainAction = pausePlayback;
   const controls = (
     <Row>
-      <Action label={active ? pauseAction : mainAction} accessibilityLabel={scalePlaybackLabel(active ? pauseAction : mainAction, scaleLabel)} onPress={phase === "paused" ? resume : phase === "playing" ? pause : start} secondary={compact} />
-      {active ? <Action label="Arrêter" accessibilityLabel={scalePlaybackLabel("Arrêter", scaleLabel)} onPress={() => stop()} secondary /> : null}
-      {active ? <Action label="Recommencer" accessibilityLabel={scalePlaybackLabel("Recommencer", scaleLabel)} onPress={start} secondary /> : null}
+      <Action
+        label={isPlaybackActive ? pauseAction : mainAction}
+        accessibilityLabel={scalePlaybackLabel(isPlaybackActive ? pauseAction : mainAction, scaleLabel)}
+        onPress={handleMainAction}
+        secondary={compact}
+      />
+      {isPlaybackActive ? <Action
+        label="Arrêter"
+        accessibilityLabel={scalePlaybackLabel("Arrêter", scaleLabel)}
+        onPress={() => stopPlayback()}
+        secondary
+      /> : null}
+      {isPlaybackActive ? <Action
+        label="Recommencer"
+        accessibilityLabel={scalePlaybackLabel("Recommencer", scaleLabel)}
+        onPress={startPlayback}
+        secondary
+      /> : null}
     </Row>
   );
-  const statusText = playbackStatus(phase, message?.text);
-  const status = message ? <Notice danger={message.danger}>{statusText}</Notice> : <Body live>{statusText}</Body>;
+  const statusText = playbackStatus(playbackPhase, playbackMessage?.text);
+  const status = playbackMessage ? <Notice danger={playbackMessage.danger}>{statusText}</Notice> : <Body live>{statusText}</Body>;
 
   if (compact) {
-    return <View>{controls}{message || active ? status : null}</View>;
+    return (
+      <View>
+        {controls}
+        {playbackMessage || isPlaybackActive ? status : null}
+      </View>
+    );
   }
 
   return (
@@ -267,14 +303,58 @@ export function AudioControls({ notes, compact = false, piano = false, scaleLabe
       <Body muted>Lecture locale, sans connexion.</Body>
       {controls}
       {status}
-      {piano && showPiano ? <Piano key={notes[0]} activeNotes={notes} soundingPitch={soundingPitch} onPlayNote={playOne} /> : <><Body>Écouter une note, depuis {notes[0]}</Body><Row>{notes.slice(0, 7).map((note, index) => <Action key={`${note}-${index}`} label={note} onPress={() => playOne(note)} hint={`Écouter la note ${note}`} selected={pitch(note) === soundingPitch} secondary />)}</Row></>}
-      {piano ? <Action label={showPiano ? "Revenir aux notes de la gamme" : "Afficher le piano"} expanded={showPiano} onPress={() => setShowPiano(!showPiano)} secondary /> : null}
-      <Action label={showSettings ? "Masquer les réglages d’écoute" : "Réglages d’écoute"} expanded={showSettings} onPress={() => setShowSettings(!showSettings)} secondary />
+      {piano && showPiano ? <Piano key={notes[0]} activeNotes={notes} soundingPitch={soundingPitch} onPlayNote={playSingleNote} /> : <>
+        <Body>Écouter une note, depuis {notes[0]}</Body>
+        <Row>
+          {notes.slice(0, 7).map((note, index) => <Action
+            key={`${note}-${index}`}
+            label={note}
+            onPress={() => playSingleNote(note)}
+            hint={`Écouter la note ${note}`}
+            selected={pitchClassForNote(note) === soundingPitch}
+            secondary
+          />)}
+        </Row>
+      </>}
+      {piano ? <Action
+        label={showPiano ? "Revenir aux notes de la gamme" : "Afficher le piano"}
+        expanded={showPiano}
+        onPress={() => setShowPiano(!showPiano)}
+        secondary
+      /> : null}
+      <Action
+        label={showSettings ? "Masquer les réglages d’écoute" : "Réglages d’écoute"}
+        expanded={showSettings}
+        onPress={() => setShowSettings(!showSettings)}
+        secondary
+      />
       {showSettings ? <>
         <Body>Sens de lecture</Body>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture"><Row><Action role="radio" label="Ascendante" onPress={() => configure("up", slow)} selected={direction === "up"} secondary /><Action role="radio" label="Descendante" onPress={() => configure("down", slow)} selected={direction === "down"} secondary /></Row></View>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture">
+          <Row>
+            <Action
+              role="radio"
+              label="Ascendante"
+              onPress={() => configurePlayback("up", slow)}
+              selected={direction === "up"}
+              secondary
+            />
+            <Action
+              role="radio"
+              label="Descendante"
+              onPress={() => configurePlayback("down", slow)}
+              selected={direction === "down"}
+              secondary
+            />
+          </Row>
+        </View>
         <Body>Vitesse de lecture</Body>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture"><Row><Action role="radio" label="Normale" onPress={() => configure(direction, false)} selected={!slow} secondary /><Action role="radio" label="Lente" onPress={() => configure(direction, true)} selected={slow} secondary /></Row></View>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture">
+          <Row>
+            <Action role="radio" label="Normale" onPress={() => configurePlayback(direction, false)} selected={!slow} secondary />
+            <Action role="radio" label="Lente" onPress={() => configurePlayback(direction, true)} selected={slow} secondary />
+          </Row>
+        </View>
       </> : null}
     </Card>
   );

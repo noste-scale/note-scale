@@ -19,15 +19,15 @@ export function orderedPitchSequence(
   direction: "up" | "down",
 ): SequencedPitch[] {
   let octave: 4 | 5 = 4;
-  let previous = -1;
-  const ascending = pitchClasses.flatMap((pitchClass) => {
+  let previousPitchClass = -1;
+  const ascendingPitches = pitchClasses.flatMap((pitchClass) => {
     if (!Number.isInteger(pitchClass) || pitchClass < 0 || pitchClass > 11) return [];
-    if (previous >= 0 && pitchClass < previous) octave = 5;
-    previous = pitchClass;
+    if (previousPitchClass >= 0 && pitchClass < previousPitchClass) octave = 5;
+    previousPitchClass = pitchClass;
     const sampleKey = sampleKeyForPitch(pitchClass, octave);
     return sampleKey ? [{ pitchClass, octave, sampleKey }] : [];
   });
-  return direction === "up" ? ascending : [...ascending].reverse();
+  return direction === "up" ? ascendingPitches : [...ascendingPitches].reverse();
 }
 
 export function playbackConfigurationKey(

@@ -15,28 +15,28 @@ const PITCH_NAMES = ["C", "Cs", "D", "Ds", "E", "F", "Fs", "G", "Gs", "A", "As",
 let activePlayer: WebScaleAudio | undefined;
 
 function ascendingPitches(pitches: readonly number[]): number[] {
-  let previous = -1;
-  return pitches.map((value) => {
-    let pitch = (Math.trunc(value) % 12 + 12) % 12;
-    while (pitch <= previous) pitch += 12;
-    previous = pitch;
+  let previousPitch = -1;
+  return pitches.map((inputPitch) => {
+    let pitch = (Math.trunc(inputPitch) % 12 + 12) % 12;
+    while (pitch <= previousPitch) pitch += 12;
+    previousPitch = pitch;
     return pitch;
   });
 }
 
 export function sampleUrlForPitch(pitch: number, base = import.meta.env.BASE_URL): string {
-  const value = Math.trunc(pitch);
-  const pitchClass = (value % 12 + 12) % 12;
-  const octave = 4 + Math.floor(value / 12);
-  const prefix = base.endsWith("/") ? base : `${base}/`;
-  return `${prefix}audio/${PITCH_NAMES[pitchClass]}${octave}.wav`;
+  const wholePitch = Math.trunc(pitch);
+  const pitchClass = (wholePitch % 12 + 12) % 12;
+  const octave = 4 + Math.floor(wholePitch / 12);
+  const basePath = base.endsWith("/") ? base : `${base}/`;
+  return `${basePath}audio/${PITCH_NAMES[pitchClass]}${octave}.wav`;
 }
 
 export class WebScaleAudio {
   private voices: AudioVoice[] = [];
-  private current: AudioVoice | undefined;
-  private paused = false;
-  private generation = 0;
+  private currentVoice: AudioVoice | undefined;
+  private isPaused = false;
+  private playbackGeneration = 0;
   private watchdog: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
@@ -46,105 +46,112 @@ export class WebScaleAudio {
     private readonly watchdogMs = 15_000,
   ) {}
 
-  get active() { return this.current !== undefined; }
+  get active() {
+    return this.currentVoice !== undefined;
+  }
 
   play(pitches: readonly number[], direction: AudioDirection, speed: AudioSpeed): boolean {
     if (!this.createVoice || pitches.length === 0) return false;
-    if (activePlayer && activePlayer !== this) activePlayer.finish("preempted");
-    if (this.active) this.finish("restarted");
+    if (activePlayer && activePlayer !== this) activePlayer.finishPlayback("preempted");
+    if (this.active) this.finishPlayback("restarted");
 
-    const generation = ++this.generation;
+    const generation = ++this.playbackGeneration;
     try {
-      const ascending = ascendingPitches(pitches);
-      const ordered = direction === "up" ? ascending : [...ascending].reverse();
-      this.voices = ordered.map((pitch) => {
+      const ascendingSequence = ascendingPitches(pitches);
+      const playbackSequence = direction === "up" ? ascendingSequence : [...ascendingSequence].reverse();
+      this.voices = playbackSequence.map((pitch) => {
         const voice = this.createVoice!(pitch);
         voice.playbackRate = speed === "slow" ? .7 : 1;
         return voice;
       });
       activePlayer = this;
-      return this.start(0, generation);
+      return this.startVoice(0, generation);
     } catch {
-      this.finish("error");
+      this.finishPlayback("error");
       this.onError?.();
       return false;
     }
   }
 
   async pauseResume(): Promise<boolean> {
-    const voice = this.current;
-    const generation = this.generation;
+    const voice = this.currentVoice;
+    const generation = this.playbackGeneration;
     if (!voice) return false;
     try {
-      if (this.paused) {
+      if (this.isPaused) {
         await voice.play();
-        if (generation !== this.generation || voice !== this.current) return this.active;
-        this.paused = false;
-        this.watch(generation, voice);
+        if (generation !== this.playbackGeneration || voice !== this.currentVoice) return this.active;
+        this.isPaused = false;
+        this.startWatchdog(generation, voice);
       } else {
         voice.pause();
-        this.paused = true;
+        this.isPaused = true;
         this.clearWatchdog();
       }
       return true;
     } catch {
-      if (generation === this.generation && voice === this.current) this.fail();
+      if (generation === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
       return this.active;
     }
   }
 
   stop(): void {
-    this.finish("stopped");
+    this.finishPlayback("stopped");
   }
 
-  private finish(reason: AudioInactiveReason): void {
+  private finishPlayback(reason: AudioInactiveReason): void {
     const wasActive = this.active || this.voices.length > 0;
-    this.generation += 1;
+    this.playbackGeneration += 1;
     this.clearWatchdog();
     for (const voice of this.voices) {
       voice.onended = null;
-      try { voice.pause(); } catch { /* Best-effort release of browser media resources. */ }
+      try {
+        voice.pause();
+      } catch { /* Best-effort release of browser media resources. */ }
       voice.currentTime = 0;
     }
     this.voices = [];
-    this.current = undefined;
-    this.paused = false;
+    this.currentVoice = undefined;
+    this.isPaused = false;
     if (activePlayer === this) activePlayer = undefined;
     if (wasActive) this.onInactive?.(reason);
   }
 
-  private fail(): void {
-    this.finish("error");
+  private failPlayback(): void {
+    this.finishPlayback("error");
     this.onError?.();
   }
 
-  private start(index: number, generation: number): boolean {
-    if (generation !== this.generation) return false;
+  private startVoice(index: number, generation: number): boolean {
+    if (generation !== this.playbackGeneration) return false;
     const voice = this.voices[index];
-    if (!voice) { this.finish("ended"); return true; }
-    this.current = voice;
+    if (!voice) {
+      this.finishPlayback("ended");
+      return true;
+    }
+    this.currentVoice = voice;
     voice.onended = () => {
-      if (generation !== this.generation || voice !== this.current) return;
+      if (generation !== this.playbackGeneration || voice !== this.currentVoice) return;
       voice.onended = null;
       this.clearWatchdog();
-      this.start(index + 1, generation);
+      this.startVoice(index + 1, generation);
     };
     try {
       void voice.play().catch(() => {
-        if (generation === this.generation && voice === this.current) this.fail();
+        if (generation === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
       });
-      this.watch(generation, voice);
+      this.startWatchdog(generation, voice);
       return true;
     } catch {
-      if (generation === this.generation && voice === this.current) this.fail();
+      if (generation === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
       return false;
     }
   }
 
-  private watch(generation: number, voice: AudioVoice): void {
+  private startWatchdog(generation: number, voice: AudioVoice): void {
     this.clearWatchdog();
     this.watchdog = setTimeout(() => {
-      if (generation === this.generation && voice === this.current && !this.paused) this.fail();
+      if (generation === this.playbackGeneration && voice === this.currentVoice && !this.isPaused) this.failPlayback();
     }, this.watchdogMs);
   }
 

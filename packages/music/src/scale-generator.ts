@@ -30,13 +30,13 @@ const ENHARMONIC_SUGGESTIONS: Readonly<Record<string, TonicId>> = {
   "A#": "Bb",
 };
 
-function alterationFor(targetPitch: number, letter: NoteLetter): -1 | 0 | 1 | null {
-  let delta = (targetPitch - NATURAL_PITCH_CLASSES[letter] + 12) % 12;
-  if (delta > 6) delta -= 12;
-  return delta === -1 || delta === 0 || delta === 1 ? delta : null;
+function findAlteration(targetPitch: number, letter: NoteLetter): -1 | 0 | 1 | null {
+  let pitchDifference = (targetPitch - NATURAL_PITCH_CLASSES[letter] + 12) % 12;
+  if (pitchDifference > 6) pitchDifference -= 12;
+  return pitchDifference === -1 || pitchDifference === 0 || pitchDifference === 1 ? pitchDifference : null;
 }
 
-function unsupported(input: string, normalized: NoteId | null): ScaleGenerationResult {
+function createUnsupportedTonicResult(input: string, normalized: NoteId | null): ScaleGenerationResult {
   const suggestion = normalized ? ENHARMONIC_SUGGESTIONS[normalized] : undefined;
   return {
     ok: false,
@@ -53,7 +53,7 @@ function unsupported(input: string, normalized: NoteId | null): ScaleGenerationR
 
 export function generateMajorScale(input: string): ScaleGenerationResult {
   const normalized = normalizeNoteId(input);
-  if (!normalized || !isTonicId(normalized)) return unsupported(input, normalized);
+  if (!normalized || !isTonicId(normalized)) return createUnsupportedTonicResult(input, normalized);
 
   const tonic = normalized;
   const tonicLetterIndex = NOTE_LETTERS.indexOf(tonic[0] as NoteLetter);
@@ -67,15 +67,23 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
     }
     const letter = NOTE_LETTERS[(tonicLetterIndex + index) % NOTE_LETTERS.length];
     const offset = MAJOR_OFFSETS[index];
-    if (!letter || offset === undefined) return unsupported(input, normalized);
-    const alteration = alterationFor((tonicPitch + offset) % 12, letter);
-    if (alteration === null) return unsupported(input, normalized);
+    if (!letter || offset === undefined) return createUnsupportedTonicResult(input, normalized);
+    const alteration = findAlteration((tonicPitch + offset) % 12, letter);
+    if (alteration === null) return createUnsupportedTonicResult(input, normalized);
     notes.push(noteIdFor(letter, alteration));
   }
 
   const metadata = getScaleMetadata(tonic);
   const signature = metadata.signature;
-  const accidentals = signature > 0 ? SHARP_ORDER.slice(0, signature) : signature < 0 ? FLAT_ORDER.slice(0, -signature) : [];
+  let accidentals: readonly NoteId[] = [];
+  let accidentalType: MajorScale["accidentalType"] = "none";
+  if (signature > 0) {
+    accidentals = SHARP_ORDER.slice(0, signature);
+    accidentalType = "sharp";
+  } else if (signature < 0) {
+    accidentals = FLAT_ORDER.slice(0, -signature);
+    accidentalType = "flat";
+  }
   const construction: ConstructionStep[] = MAJOR_INTERVALS.map((semitones, index) => {
     const currentNote = notes[index];
     const nextNote = notes[index + 1];
@@ -110,7 +118,7 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
       internationalName: `${formatNote(tonic, "international")} major`,
       notes,
       accidentals,
-      accidentalType: signature > 0 ? "sharp" : signature < 0 ? "flat" : "none",
+      accidentalType,
       keySignatureCount: Math.abs(signature),
       construction,
     },
@@ -131,11 +139,11 @@ export function getScaleById(id: string): MajorScale | undefined {
 }
 
 export function scalePitchIds(scale: MajorScale, direction: "ascending" | "descending" = "ascending"): readonly number[] {
-  let previous = -1;
+  let previousPitch = -1;
   const pitches = scale.notes.map((note) => {
     let pitch = pitchClassOf(note);
-    while (pitch <= previous) pitch += 12;
-    previous = pitch;
+    while (pitch <= previousPitch) pitch += 12;
+    previousPitch = pitch;
     return pitch;
   });
   return direction === "ascending" ? pitches : [...pitches].reverse();

@@ -42,10 +42,10 @@ describe("progress and spaced review", () => {
       expect(review?.stage).toBe(index);
       expect(new Date(review?.dueAt ?? 0).getTime() - now.getTime()).toBe(REVIEW_INTERVAL_DAYS[index]! * 86_400_000);
     }
-    const wrongAt = new Date("2026-09-01T12:00:00.000Z");
-    progress = recordAttempt(progress, { exerciseType: "complete-scale", scaleId: "A", correct: false }, wrongAt);
+    const incorrectAnswerTime = new Date("2026-09-01T12:00:00.000Z");
+    progress = recordAttempt(progress, { exerciseType: "complete-scale", scaleId: "A", correct: false }, incorrectAnswerTime);
     expect(progress.reviews.A?.stage).toBe(-1);
-    expect(new Date(progress.reviews.A?.dueAt ?? 0).getTime() - wrongAt.getTime()).toBe(10 * 60_000);
+    expect(new Date(progress.reviews.A?.dueAt ?? 0).getTime() - incorrectAnswerTime.getTime()).toBe(10 * 60_000);
   });
 
   it("counts at most one streak day and handles local-calendar boundaries", () => {
@@ -68,16 +68,16 @@ describe("progress and spaced review", () => {
   });
 
   it("falls back deterministically when review dates and RNG values are invalid", () => {
-    const malformed = {
+    const malformedProgress = {
       ...createEmptyProgress(),
       reviews: {
         Eb: { scaleId: "Eb", stage: 0, dueAt: "not-a-date", lastReviewedAt: "not-a-date" },
       },
     } as ProgressState;
-    const first = selectReviewScales(malformed, 3, () => Number.NaN, new Date("2026-08-11T00:00:00Z"));
-    const second = selectReviewScales(malformed, 3, () => Number.NaN, new Date("2026-08-11T00:00:00Z"));
-    expect(first.map(({ id }) => id)).toEqual(second.map(({ id }) => id));
-    expect(new Set(first.map(({ id }) => id)).size).toBe(3);
+    const firstSelection = selectReviewScales(malformedProgress, 3, () => Number.NaN, new Date("2026-08-11T00:00:00Z"));
+    const secondSelection = selectReviewScales(malformedProgress, 3, () => Number.NaN, new Date("2026-08-11T00:00:00Z"));
+    expect(firstSelection.map(({ id }) => id)).toEqual(secondSelection.map(({ id }) => id));
+    expect(new Set(firstSelection.map(({ id }) => id)).size).toBe(3);
   });
 
   it("treats nonpositive and nonfinite recent-attempt limits as empty", () => {
@@ -102,20 +102,20 @@ describe("progress and spaced review", () => {
 
     expect(summarizeProgress(progress, now).toReview).toContain("C");
     expect(summarizeProgress(progress, now).toReview).not.toContain("G");
-    const selected = selectReviewScales(progress, 3, () => 0, now).map(({ id }) => id);
-    expect(selected[0]).toBe("C");
-    expect(selected).not.toContain("G");
+    const selectedScaleIds = selectReviewScales(progress, 3, () => 0, now).map(({ id }) => id);
+    expect(selectedScaleIds[0]).toBe("C");
+    expect(selectedScaleIds).not.toContain("G");
   });
 
   it("resets only the displayed streak after a missed local day", () => {
-    const trained = recordAttempt(
+    const trainedProgress = recordAttempt(
       createEmptyProgress(),
       { exerciseType: "identify-interval", correct: true },
       new Date(2026, 7, 8, 9),
     );
-    expect(summarizeProgress(trained, new Date(2026, 7, 9, 23)).streak).toBe(1);
-    expect(summarizeProgress(trained, new Date(2026, 7, 10, 0, 1)).streak).toBe(0);
-    expect(trained.streak).toBe(1);
+    expect(summarizeProgress(trainedProgress, new Date(2026, 7, 9, 23)).streak).toBe(1);
+    expect(summarizeProgress(trainedProgress, new Date(2026, 7, 10, 0, 1)).streak).toBe(0);
+    expect(trainedProgress.streak).toBe(1);
   });
 
   it("merges concurrent progress without losing or duplicating attempts", () => {

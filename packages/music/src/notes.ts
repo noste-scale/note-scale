@@ -22,33 +22,39 @@ export const FRENCH_NOTE_NAMES: Readonly<Record<NoteLetter, string>> = {
   B: "Si",
 };
 
-const INTERNATIONAL_TO_FRENCH = new Map(Object.entries(FRENCH_NOTE_NAMES).map(([letter, name]) => [name.toLocaleLowerCase("fr"), letter]));
+const FRENCH_TO_INTERNATIONAL = new Map(
+  Object.entries(FRENCH_NOTE_NAMES).map(([letter, frenchName]) => [frenchName.toLocaleLowerCase("fr"), letter]),
+);
 
 export function normalizeNoteId(value: string): NoteId | null {
-  const trimmed = value.trim().replaceAll("♯", "#").replaceAll("♭", "b");
-  const international = /^([a-g])([#b]?)$/i.exec(trimmed);
-  if (international) {
-    const letter = international[1]?.toUpperCase();
-    const suffix = (international[2] ?? "").toLowerCase();
+  const normalizedInput = value.trim().replaceAll("♯", "#").replaceAll("♭", "b");
+  const internationalMatch = /^([a-g])([#b]?)$/i.exec(normalizedInput);
+  if (internationalMatch) {
+    const letter = internationalMatch[1]?.toUpperCase();
+    const suffix = (internationalMatch[2] ?? "").toLowerCase();
     return `${letter}${suffix}` as NoteId;
   }
 
-  const french = /^(do|ré|re|mi|fa|sol|la|si)([#b]?)$/iu.exec(trimmed);
-  if (!french) return null;
-  const normalizedName = french[1]?.toLocaleLowerCase("fr").replace("re", "ré");
-  const letter = normalizedName ? INTERNATIONAL_TO_FRENCH.get(normalizedName) : undefined;
-  const suffix = (french[2] ?? "").toLowerCase();
+  const frenchMatch = /^(do|ré|re|mi|fa|sol|la|si)([#b]?)$/iu.exec(normalizedInput);
+  if (!frenchMatch) return null;
+  const normalizedName = frenchMatch[1]?.toLocaleLowerCase("fr").replace("re", "ré");
+  const letter = normalizedName ? FRENCH_TO_INTERNATIONAL.get(normalizedName) : undefined;
+  const suffix = (frenchMatch[2] ?? "").toLowerCase();
   return letter ? (`${letter}${suffix}` as NoteId) : null;
 }
 
 export function accidentalOf(noteId: NoteId): Accidental {
-  return noteId.endsWith("#") ? "sharp" : noteId.endsWith("b") ? "flat" : "natural";
+  if (noteId.endsWith("#")) return "sharp";
+  if (noteId.endsWith("b")) return "flat";
+  return "natural";
 }
 
 export function pitchClassOf(noteId: NoteId): number {
   const letter = noteId[0] as NoteLetter;
-  const delta = noteId.endsWith("#") ? 1 : noteId.endsWith("b") ? -1 : 0;
-  return (NATURAL_PITCH_CLASSES[letter] + delta + 12) % 12;
+  let alteration = 0;
+  if (noteId.endsWith("#")) alteration = 1;
+  else if (noteId.endsWith("b")) alteration = -1;
+  return (NATURAL_PITCH_CLASSES[letter] + alteration + 12) % 12;
 }
 
 export function toMusicalNote(noteId: NoteId): MusicalNote {
@@ -64,13 +70,19 @@ export function toMusicalNote(noteId: NoteId): MusicalNote {
 }
 
 export function formatNote(noteId: string, locale: "fr" | "international" = "fr"): string {
-  const normalized = normalizeNoteId(noteId);
-  if (!normalized) return noteId;
-  const letter = normalized[0] as NoteLetter;
-  const suffix = normalized.endsWith("#") ? "♯" : normalized.endsWith("b") ? "♭" : "";
-  return `${locale === "fr" ? FRENCH_NOTE_NAMES[letter] : letter}${suffix}`;
+  const normalizedNote = normalizeNoteId(noteId);
+  if (!normalizedNote) return noteId;
+  const letter = normalizedNote[0] as NoteLetter;
+  let suffix = "";
+  if (normalizedNote.endsWith("#")) suffix = "♯";
+  else if (normalizedNote.endsWith("b")) suffix = "♭";
+  const noteName = locale === "fr" ? FRENCH_NOTE_NAMES[letter] : letter;
+  return `${noteName}${suffix}`;
 }
 
 export function noteIdFor(letter: NoteLetter, alteration: -1 | 0 | 1): NoteId {
-  return `${letter}${alteration === 1 ? "#" : alteration === -1 ? "b" : ""}` as NoteId;
+  let suffix = "";
+  if (alteration === 1) suffix = "#";
+  else if (alteration === -1) suffix = "b";
+  return `${letter}${suffix}` as NoteId;
 }

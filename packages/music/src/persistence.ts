@@ -23,13 +23,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function validIsoDate(value: unknown): value is string {
+function isCanonicalIsoDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const parsed = new Date(value);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
 }
 
-function validLocalDate(value: unknown): value is string {
+function isValidLocalDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return false;
@@ -49,7 +49,7 @@ function parseAttempt(value: unknown): Attempt | null {
     typeof exerciseType !== "string" ||
     !EXERCISE_TYPES.has(exerciseType as ExerciseType) ||
     typeof correct !== "boolean" ||
-    !validIsoDate(answeredAt) ||
+    !isCanonicalIsoDate(answeredAt) ||
     (scaleId !== undefined && (typeof scaleId !== "string" || !isTonicId(scaleId)))
   ) {
     return null;
@@ -72,8 +72,8 @@ function parseReview(key: string, value: unknown): ReviewRecord | null {
     !Number.isInteger(stage) ||
     stage < -1 ||
     stage > 4 ||
-    !validIsoDate(dueAt) ||
-    !validIsoDate(lastReviewedAt)
+    !isCanonicalIsoDate(dueAt) ||
+    !isCanonicalIsoDate(lastReviewedAt)
   ) {
     return null;
   }
@@ -89,8 +89,8 @@ export function decodeProgress(raw: string | null): PersistenceResult {
     return { state: createEmptyProgress(), warning: null, status: "missing", canSave: true };
   }
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!isObject(parsed) || parsed.version !== 1) {
+    const storedProgress: unknown = JSON.parse(raw);
+    if (!isObject(storedProgress) || storedProgress.version !== 1) {
       return {
         state: createEmptyProgress(),
         warning: "Progression locale incompatible ; les données existantes ont été conservées.",
@@ -98,41 +98,45 @@ export function decodeProgress(raw: string | null): PersistenceResult {
         canSave: false,
       };
     }
-    const parsedAttempts = Array.isArray(parsed.attempts)
-      ? parsed.attempts.map(parseAttempt).filter((item): item is Attempt => item !== null)
+    const parsedAttempts = Array.isArray(storedProgress.attempts)
+      ? storedProgress.attempts.map(parseAttempt).filter((item): item is Attempt => item !== null)
       : [];
     const normalizedAttempts = normalizeProgressAttempts(parsedAttempts);
     const attempts = normalizedAttempts.attempts;
     const reviews: Partial<Record<TonicId, ReviewRecord>> = {};
-    if (isObject(parsed.reviews)) {
-      for (const [key, value] of Object.entries(parsed.reviews)) {
+    if (isObject(storedProgress.reviews)) {
+      for (const [key, value] of Object.entries(storedProgress.reviews)) {
         const record = parseReview(key, value);
         if (record) reviews[record.scaleId] = record;
       }
     }
-    const validStreak = typeof parsed.streak === "number" && Number.isInteger(parsed.streak) && parsed.streak >= 0;
-    const streak = validStreak ? parsed.streak as number : 0;
-    const validTrainingDate = parsed.lastTrainingDate === null || validLocalDate(parsed.lastTrainingDate);
-    const lastTrainingDate = validLocalDate(parsed.lastTrainingDate) ? parsed.lastTrainingDate : null;
-    const reordered = normalizedAttempts.duplicateCount > 0 || normalizedAttempts.outOfOrder;
-    const droppedFields =
-      !Array.isArray(parsed.attempts) ||
-      parsedAttempts.length !== parsed.attempts.length ||
+    const hasValidStreak = typeof storedProgress.streak === "number" && Number.isInteger(storedProgress.streak) && storedProgress.streak >= 0;
+    const streak = hasValidStreak ? storedProgress.streak as number : 0;
+    const hasValidTrainingDate = storedProgress.lastTrainingDate === null || isValidLocalDate(storedProgress.lastTrainingDate);
+    const lastTrainingDate = isValidLocalDate(storedProgress.lastTrainingDate) ? storedProgress.lastTrainingDate : null;
+    const attemptsNeedNormalization = normalizedAttempts.duplicateCount > 0 || normalizedAttempts.outOfOrder;
+    const hasInvalidFields =
+      !Array.isArray(storedProgress.attempts) ||
+      parsedAttempts.length !== storedProgress.attempts.length ||
       normalizedAttempts.duplicateCount > 0 ||
       normalizedAttempts.outOfOrder ||
-      !isObject(parsed.reviews) ||
-      Object.keys(reviews).length !== Object.keys(parsed.reviews).length ||
-      !validStreak ||
-      !validTrainingDate;
-    const rebuilt = reordered ? rebuildProgressFromAttempts(attempts) : null;
+      !isObject(storedProgress.reviews) ||
+      Object.keys(reviews).length !== Object.keys(storedProgress.reviews).length ||
+      !hasValidStreak ||
+      !hasValidTrainingDate;
+    const rebuiltProgress = attemptsNeedNormalization ? rebuildProgressFromAttempts(attempts) : null;
+    let warning: string | null = null;
+    if (attemptsNeedNormalization) {
+      warning = "Des tentatives en double ou hors ordre ont \u00e9t\u00e9 normalis\u00e9es.";
+    } else if (hasInvalidFields) {
+      warning = "Certaines donn\u00e9es locales invalides ont \u00e9t\u00e9 ignor\u00e9es.";
+    }
     return {
-      state: rebuilt
-        ? { ...rebuilt, reviews: { ...reviews, ...rebuilt.reviews } }
+      state: rebuiltProgress
+        ? { ...rebuiltProgress, reviews: { ...reviews, ...rebuiltProgress.reviews } }
         : { version: 1, attempts, reviews, streak, lastTrainingDate },
-      warning: reordered
-        ? "Des tentatives en double ou hors ordre ont \u00e9t\u00e9 normalis\u00e9es."
-        : droppedFields ? "Certaines donn\u00e9es locales invalides ont \u00e9t\u00e9 ignor\u00e9es." : null,
-      status: droppedFields ? "recovered" : "valid",
+      warning,
+      status: hasInvalidFields ? "recovered" : "valid",
       canSave: true,
     };
   } catch {
