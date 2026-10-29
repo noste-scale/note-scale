@@ -98,19 +98,19 @@ export interface ExerciseView {
 
 const exerciseKinds: ExerciseKind[] = ["complete-scale", "build-scale", "find-accidentals", "identify-interval", "find-error"];
 
-function chooseRandomIndex(length: number, rng: () => number): number {
+function chooseRandomIndex(candidateCount: number, rng: () => number): number {
   const randomValue = rng();
   const boundedRandomValue = Number.isFinite(randomValue)
     ? Math.min(Math.max(randomValue, 0), 0.999999999999)
     : 0;
-  return Math.floor(boundedRandomValue * length);
+  return Math.floor(boundedRandomValue * candidateCount);
 }
 
 function createSeededRandom(seed: number): () => number {
-  let state = (seed + 1) >>> 0;
+  let randomState = (seed + 1) >>> 0;
   return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
+    randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+    return randomState / 4294967296;
   };
 }
 
@@ -133,7 +133,7 @@ export function selectExerciseScale(
   rng: () => number = Math.random,
   now = new Date(),
 ): MajorScale | undefined {
-  const preferredScale = MAJOR_SCALES.find((item) => item.id === preferredScaleId);
+  const preferredScale = MAJOR_SCALES.find((scaleOption) => scaleOption.id === preferredScaleId);
   if (preferredScale) return preferredScale;
   if (!progress) return MAJOR_SCALES[chooseRandomIndex(MAJOR_SCALES.length, rng)];
 
@@ -172,7 +172,7 @@ function shuffleValues<T>(values: readonly T[], rng: () => number): T[] {
 
 function createExerciseView(exercise: Exercise, scale: MajorScale, rng: () => number): ExerciseView {
   const answer = formatExerciseAnswer(exercise);
-  const distractorScale = MAJOR_SCALES.find((item) => item.id !== scale.id) ?? scale;
+  const distractorScale = MAJOR_SCALES.find((scaleOption) => scaleOption.id !== scale.id) ?? scale;
   const distractorExercise = createExercise(exercise.type, distractorScale, rng);
   let answerCandidates = exercise.options;
   if (!answerCandidates) {
@@ -223,8 +223,8 @@ function createExerciseView(exercise: Exercise, scale: MajorScale, rng: () => nu
 }
 
 export function gradeSelection(exercise: ExerciseView, selected: readonly string[] | string): GradeResult {
-  const labels = typeof selected === "string" ? [selected] : selected;
-  return gradeExercise(exercise.domainExercise, selectionPayload(labels, exercise.optionPayloads));
+  const selectedLabels = typeof selected === "string" ? [selected] : selected;
+  return gradeExercise(exercise.domainExercise, selectionPayload(selectedLabels, exercise.optionPayloads));
 }
 
 export function displayGradeAnswer(answers: readonly string[], kind: ExerciseKind): string {
@@ -235,7 +235,7 @@ export function makeDailyExercises(progress: ProgressState, now = new Date()): E
   const dateSeed = Number(localDateKey(now).replaceAll("-", ""));
   const session = createDailySession(progress, createSeededRandom(dateSeed), now);
   return [session.naturalSemitoneQuestion, ...session.scaleExercises].map((exercise, index) => {
-    const scale = MAJOR_SCALES.find((item) => item.id === exercise.scaleId) ?? MAJOR_SCALES[index] ?? MAJOR_SCALES[0];
+    const scale = MAJOR_SCALES.find((scaleOption) => scaleOption.id === exercise.scaleId) ?? MAJOR_SCALES[index] ?? MAJOR_SCALES[0];
     return scale ? createExerciseView(exercise, scale, createSeededRandom(dateSeed + index)) : undefined;
   }).filter((exercise): exercise is ExerciseView => Boolean(exercise));
 }

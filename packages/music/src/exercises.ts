@@ -23,9 +23,9 @@ const TYPES: readonly ExerciseType[] = [
 
 function chooseRandomIndex(length: number, rng: RandomSource): number {
   if (length <= 0) return 0;
-  const value = rng();
-  const boundedValue = Number.isFinite(value) ? Math.min(Math.max(value, 0), 0.999999999999) : 0;
-  return Math.floor(boundedValue * length);
+  const randomValue = rng();
+  const boundedRandomValue = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 0.999999999999) : 0;
+  return Math.floor(boundedRandomValue * length);
 }
 
 function createExerciseId(type: ExerciseType, scale: string, rng: RandomSource): string {
@@ -101,12 +101,12 @@ function createIdentifyIntervalExercise(rng: RandomSource): Exercise {
 }
 
 function createFindErrorExercise(scale: MajorScale, rng: RandomSource): Exercise {
-  const alteredNotes = scale.notes
+  const accidentalNotes = scale.notes
     .slice(1, 7)
     .map((note, index) => ({ note, index: index + 1 }))
     .filter(({ note }) => note.endsWith("#") || note.endsWith("b"));
   const fallbackIndex = 1 + chooseRandomIndex(6, rng);
-  const noteToCorrect = alteredNotes[chooseRandomIndex(alteredNotes.length, rng)] ?? {
+  const noteToCorrect = accidentalNotes[chooseRandomIndex(accidentalNotes.length, rng)] ?? {
     note: scale.notes[fallbackIndex] ?? scale.notes[1] ?? "D",
     index: fallbackIndex,
   };
@@ -150,10 +150,10 @@ export function generateExercise(rng: RandomSource = Math.random, type?: Exercis
 
 function normalizeAnswer(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const note = normalizeNoteId(trimmed);
-  return note ?? trimmed.toLocaleLowerCase("fr");
+  const trimmedAnswer = value.trim();
+  if (!trimmedAnswer) return null;
+  const noteId = normalizeNoteId(trimmedAnswer);
+  return noteId ?? trimmedAnswer.toLocaleLowerCase("fr");
 }
 
 export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult {
@@ -180,15 +180,15 @@ export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult 
   const errors = [];
 
   if (answerOrderDoesNotMatter) {
-    const actualSet = new Set(actualAnswer);
-    const expectedSet = new Set(expectedAnswer);
-    for (const item of expectedSet) {
-      if (!actualSet.has(item)) errors.push({ expected: item, message: `${formatNote(item)} manque.` });
+    const submittedAccidentals = new Set(actualAnswer);
+    const expectedAccidentals = new Set(expectedAnswer);
+    for (const expectedAccidental of expectedAccidentals) {
+      if (!submittedAccidentals.has(expectedAccidental)) errors.push({ expected: expectedAccidental, message: `${formatNote(expectedAccidental)} manque.` });
     }
-    for (const item of actualSet) {
-      if (!expectedSet.has(item)) errors.push({ actual: item, message: `${formatNote(item)} n’appartient pas à l’armure.` });
+    for (const submittedAccidental of submittedAccidentals) {
+      if (!expectedAccidentals.has(submittedAccidental)) errors.push({ actual: submittedAccidental, message: `${formatNote(submittedAccidental)} n’appartient pas à l’armure.` });
     }
-    if (actualAnswer.length !== actualSet.size) errors.push({ message: "Une altération a été répétée." });
+    if (actualAnswer.length !== submittedAccidentals.size) errors.push({ message: "Une altération a été répétée." });
   } else {
     const answerLength = Math.max(actualAnswer.length, expectedAnswer.length);
     for (let index = 0; index < answerLength; index += 1) {

@@ -24,8 +24,8 @@ export const EXERCISE_TYPES: readonly ExerciseType[] = [
 
 export function randomExerciseTypeIndex(rng: () => number = Math.random): number {
   const randomValue = rng();
-  const boundedValue = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), .999999999999) : 0;
-  return Math.floor(boundedValue * EXERCISE_TYPES.length);
+  const boundedRandomValue = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), .999999999999) : 0;
+  return Math.floor(boundedRandomValue * EXERCISE_TYPES.length);
 }
 
 export interface ExerciseSelection {
@@ -52,9 +52,9 @@ function selectWeightedIndex(candidateCount: number, rng: () => number): number 
   const totalWeight = candidateCount * (candidateCount + 1) / 2;
   const randomValue = rng();
   let remainingWeight = (Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), .999999999999) : 0) * totalWeight;
-  for (let index = 0; index < candidateCount; index += 1) {
-    remainingWeight -= candidateCount - index;
-    if (remainingWeight < 0) return index;
+  for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex += 1) {
+    remainingWeight -= candidateCount - candidateIndex;
+    if (remainingWeight < 0) return candidateIndex;
   }
   return Math.max(0, candidateCount - 1);
 }
@@ -63,9 +63,9 @@ function fingerprintExercise(exercise: Exercise): string {
   return JSON.stringify([exercise.type, exercise.question, exercise.promptNotes, exercise.correctAnswer]);
 }
 
-function differsFromPreviousExercise(candidate: Exercise, previous: Exercise): boolean {
-  return fingerprintExercise(candidate) !== fingerprintExercise(previous)
-    && displayedCorrectAnswer(candidate.correctAnswer) !== displayedCorrectAnswer(previous.correctAnswer);
+function differsFromPreviousExercise(candidateExercise: Exercise, previous: Exercise): boolean {
+  return fingerprintExercise(candidateExercise) !== fingerprintExercise(previous)
+    && displayedCorrectAnswer(candidateExercise.correctAnswer) !== displayedCorrectAnswer(previous.correctAnswer);
 }
 
 function createDomainExercise(exerciseTypeIndex: number, scale: UiScale, rng: () => number): Exercise | undefined {
@@ -115,9 +115,9 @@ export function createRegularExercise(
   // ponytail: four seeds cover today's finite variants; replace with domain variant enumeration if kinds grow.
   for (const fallbackScale of preferredScale ? [preferredScale] : candidateScales) {
     for (const seed of [0, .34, .67, .99]) {
-      const candidate = createDomainExercise(exerciseTypeIndex, fallbackScale, () => seed);
-      if (candidate && differsFromPreviousExercise(candidate, previousSelection.exercise)) {
-        return { scale: fallbackScale, exercise: candidate };
+      const candidateExercise = createDomainExercise(exerciseTypeIndex, fallbackScale, () => seed);
+      if (candidateExercise && differsFromPreviousExercise(candidateExercise, previousSelection.exercise)) {
+        return { scale: fallbackScale, exercise: candidateExercise };
       }
     }
   }
@@ -126,9 +126,9 @@ export function createRegularExercise(
   if (preferredScale) {
     for (const fallbackType of EXERCISE_TYPES) {
       for (const seed of [0, .34, .67, .99]) {
-        const candidate = createDomainExercise(EXERCISE_TYPES.indexOf(fallbackType), preferredScale, () => seed);
-        if (candidate && differsFromPreviousExercise(candidate, previousSelection.exercise)) {
-          return { scale: preferredScale, exercise: candidate };
+        const candidateExercise = createDomainExercise(EXERCISE_TYPES.indexOf(fallbackType), preferredScale, () => seed);
+        if (candidateExercise && differsFromPreviousExercise(candidateExercise, previousSelection.exercise)) {
+          return { scale: preferredScale, exercise: candidateExercise };
         }
       }
     }
@@ -140,24 +140,24 @@ export function parseExerciseAnswer(exercise: Exercise, answer: string): string[
   if (exercise.options) return [answer];
   return answer
     .split(/\s*(?:,|–|—|-)\s*|\s+/u)
-    .filter((note) => note && note.toLocaleLowerCase("fr") !== "et");
+    .filter((answerPart) => answerPart && answerPart.toLocaleLowerCase("fr") !== "et");
 }
 
 export function displayedCorrectAnswer(answer: readonly string[]): string {
-  return answer.map((note) => formatNote(note)).join(" – ") || "aucune altération";
+  return answer.map((answerNote) => formatNote(answerNote)).join(" – ") || "aucune altération";
 }
 
 export function submitExerciseAnswer(
   exercise: Exercise,
   answer: string,
-  alreadyRecorded: boolean,
-  record: (attempt: RecordedExercise) => void,
+  hasRecordedAttempt: boolean,
+  recordAttempt: (attempt: RecordedExercise) => void,
 ): GradeResult {
-  const result = gradeExercise(exercise, parseExerciseAnswer(exercise, answer));
-  if (result.graded && !alreadyRecorded) {
-    record({ scaleId: exercise.scaleId, correct: result.correct, exerciseType: exercise.type });
+  const gradeResult = gradeExercise(exercise, parseExerciseAnswer(exercise, answer));
+  if (gradeResult.graded && !hasRecordedAttempt) {
+    recordAttempt({ scaleId: exercise.scaleId, correct: gradeResult.correct, exerciseType: exercise.type });
   }
-  return result;
+  return gradeResult;
 }
 
 export function filterScales(query: string): UiScale[] {
@@ -183,14 +183,14 @@ export function safeRouteScaleId(value: string): string | null {
 }
 
 export function focusMainContent(root: { getElementById(id: string): { focus(): void } | null }): boolean {
-  const main = root.getElementById("contenu");
-  if (!main) return false;
-  main.focus();
+  const mainContent = root.getElementById("contenu");
+  if (!mainContent) return false;
+  mainContent.focus();
   return true;
 }
 
-export function constructionDetails(scaleId: string, step: number): ConstructionDetails | undefined {
-  const construction = majorScaleById.get(scaleId)?.construction[step - 1];
+export function constructionDetails(scaleId: string, completedIntervalCount: number): ConstructionDetails | undefined {
+  const construction = majorScaleById.get(scaleId)?.construction[completedIntervalCount - 1];
   if (!construction) return undefined;
   let requiredAccidental = "aucune";
   if (construction.alteration === "sharp") requiredAccidental = "dièse";

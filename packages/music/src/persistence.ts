@@ -25,8 +25,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function isCanonicalIsoDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
-  const parsed = new Date(value);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+  const parsedInstant = new Date(value);
+  return !Number.isNaN(parsedInstant.getTime()) && parsedInstant.toISOString() === value;
 }
 
 function isValidLocalDate(value: unknown): value is string {
@@ -36,8 +36,8 @@ function isValidLocalDate(value: unknown): value is string {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+  const parsedCalendarDay = new Date(Date.UTC(year, month - 1, day));
+  return parsedCalendarDay.getUTCFullYear() === year && parsedCalendarDay.getUTCMonth() === month - 1 && parsedCalendarDay.getUTCDate() === day;
 }
 
 function parseAttempt(value: unknown): Attempt | null {
@@ -99,15 +99,15 @@ export function decodeProgress(raw: string | null): PersistenceResult {
       };
     }
     const parsedAttempts = Array.isArray(storedProgress.attempts)
-      ? storedProgress.attempts.map(parseAttempt).filter((item): item is Attempt => item !== null)
+      ? storedProgress.attempts.map(parseAttempt).filter((attempt): attempt is Attempt => attempt !== null)
       : [];
     const normalizedAttempts = normalizeProgressAttempts(parsedAttempts);
     const attempts = normalizedAttempts.attempts;
     const reviews: Partial<Record<TonicId, ReviewRecord>> = {};
     if (isObject(storedProgress.reviews)) {
-      for (const [key, value] of Object.entries(storedProgress.reviews)) {
-        const record = parseReview(key, value);
-        if (record) reviews[record.scaleId] = record;
+      for (const [scaleId, storedReview] of Object.entries(storedProgress.reviews)) {
+        const review = parseReview(scaleId, storedReview);
+        if (review) reviews[review.scaleId] = review;
       }
     }
     const hasValidStreak = typeof storedProgress.streak === "number" && Number.isInteger(storedProgress.streak) && storedProgress.streak >= 0;

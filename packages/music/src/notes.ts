@@ -31,16 +31,16 @@ export function normalizeNoteId(value: string): NoteId | null {
   const internationalMatch = /^([a-g])([#b]?)$/i.exec(normalizedInput);
   if (internationalMatch) {
     const letter = internationalMatch[1]?.toUpperCase();
-    const suffix = (internationalMatch[2] ?? "").toLowerCase();
-    return `${letter}${suffix}` as NoteId;
+    const accidentalSuffix = (internationalMatch[2] ?? "").toLowerCase();
+    return `${letter}${accidentalSuffix}` as NoteId;
   }
 
   const frenchMatch = /^(do|ré|re|mi|fa|sol|la|si)([#b]?)$/iu.exec(normalizedInput);
   if (!frenchMatch) return null;
   const normalizedName = frenchMatch[1]?.toLocaleLowerCase("fr").replace("re", "ré");
   const letter = normalizedName ? FRENCH_TO_INTERNATIONAL.get(normalizedName) : undefined;
-  const suffix = (frenchMatch[2] ?? "").toLowerCase();
-  return letter ? (`${letter}${suffix}` as NoteId) : null;
+  const accidentalSuffix = (frenchMatch[2] ?? "").toLowerCase();
+  return letter ? (`${letter}${accidentalSuffix}` as NoteId) : null;
 }
 
 export function accidentalOf(noteId: NoteId): Accidental {
@@ -73,16 +73,16 @@ export function formatNote(noteId: string, locale: "fr" | "international" = "fr"
   const normalizedNote = normalizeNoteId(noteId);
   if (!normalizedNote) return noteId;
   const letter = normalizedNote[0] as NoteLetter;
-  let suffix = "";
-  if (normalizedNote.endsWith("#")) suffix = "♯";
-  else if (normalizedNote.endsWith("b")) suffix = "♭";
+  let accidentalSymbol = "";
+  if (normalizedNote.endsWith("#")) accidentalSymbol = "♯";
+  else if (normalizedNote.endsWith("b")) accidentalSymbol = "♭";
   const noteName = locale === "fr" ? FRENCH_NOTE_NAMES[letter] : letter;
-  return `${noteName}${suffix}`;
+  return `${noteName}${accidentalSymbol}`;
 }
 
 export function noteIdFor(letter: NoteLetter, alteration: -1 | 0 | 1): NoteId {
-  let suffix = "";
-  if (alteration === 1) suffix = "#";
-  else if (alteration === -1) suffix = "b";
-  return `${letter}${suffix}` as NoteId;
+  let accidentalSuffix = "";
+  if (alteration === 1) accidentalSuffix = "#";
+  else if (alteration === -1) accidentalSuffix = "b";
+  return `${letter}${accidentalSuffix}` as NoteId;
 }

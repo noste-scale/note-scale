@@ -5,11 +5,11 @@ import { scales } from "../src/domain";
 
 export default function GeneratorScreen() {
   const [selectedScaleId, setSelectedScaleId] = useState("C");
-  const [stepIndex, setStepIndex] = useState(0);
+  const [constructionStepIndex, setConstructionStepIndex] = useState(0);
   const [showAllTonics, setShowAllTonics] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const scale = scales.find((item) => item.id === selectedScaleId);
-  const constructionStep = scale?.construction[stepIndex];
+  const scale = scales.find((scaleOption) => scaleOption.id === selectedScaleId);
+  const constructionStep = scale?.construction[constructionStepIndex];
   const lastStepIndex = scale ? scale.construction.length - 1 : 0;
   return (
     <Screen nativeHeader subtitle="Pars d’une note, puis avance d’un intervalle à la fois.">
@@ -17,13 +17,13 @@ export default function GeneratorScreen() {
         <Heading>Note de départ</Heading>
         <View accessibilityRole="radiogroup" accessibilityLabel="Note de départ de la gamme">
           <Row>
-            {scales.filter((item) => showAllTonics || ["C", "G", "D", selectedScaleId].includes(item.id)).map((item) => <Chip
-              key={item.id}
-              label={item.notes[0] ?? item.tonic}
-              selected={item.id === selectedScaleId}
+            {scales.filter((scaleOption) => showAllTonics || ["C", "G", "D", selectedScaleId].includes(scaleOption.id)).map((scaleOption) => <Chip
+              key={scaleOption.id}
+              label={scaleOption.notes[0] ?? scaleOption.tonic}
+              selected={scaleOption.id === selectedScaleId}
               onPress={() => {
-                setSelectedScaleId(item.id);
-                setStepIndex(0);
+                setSelectedScaleId(scaleOption.id);
+                setConstructionStepIndex(0);
                 setShowExplanation(false);
               }}
             />)}
@@ -39,24 +39,24 @@ export default function GeneratorScreen() {
       {scale && constructionStep ? (
         <Card>
           <Heading>{scale.frenchName}</Heading>
-          <Body live>Étape {stepIndex + 1} sur {scale.construction.length} : {constructionStep.currentNote} + {constructionStep.intervalLabel} → {constructionStep.result}</Body>
-          <Formula activeStep={stepIndex} />
-          <Body>{[scale.notes[0], ...scale.construction.slice(0, stepIndex + 1).map((item) => item.result)].join(" – ")}</Body>
-          {stepIndex === lastStepIndex ? <Body>Gamme terminée : chaque lettre apparaît une fois, puis on retrouve la note de départ à l’octave.</Body> : null}
+          <Body live>Étape {constructionStepIndex + 1} sur {scale.construction.length} : {constructionStep.currentNote} + {constructionStep.intervalLabel} → {constructionStep.result}</Body>
+          <Formula activeStep={constructionStepIndex} />
+          <Body>{[scale.notes[0], ...scale.construction.slice(0, constructionStepIndex + 1).map((completedStep) => completedStep.result)].join(" – ")}</Body>
+          {constructionStepIndex === lastStepIndex ? <Body>Gamme terminée : chaque lettre apparaît une fois, puis on retrouve la note de départ à l’octave.</Body> : null}
           <Row>
             <Action
               label="Étape précédente"
               secondary
               onPress={() => {
-                setStepIndex((value) => Math.max(0, value - 1));
+                setConstructionStepIndex((value) => Math.max(0, value - 1));
                 setShowExplanation(false);
               }}
-              disabled={stepIndex === 0}
+              disabled={constructionStepIndex === 0}
             />
             <Action
-              label={stepIndex === lastStepIndex ? "Recommencer" : "Étape suivante"}
+              label={constructionStepIndex === lastStepIndex ? "Recommencer" : "Étape suivante"}
               onPress={() => {
-                setStepIndex((value) => value === lastStepIndex ? 0 : value + 1);
+                setConstructionStepIndex((value) => value === lastStepIndex ? 0 : value + 1);
                 setShowExplanation(false);
               }}
             />

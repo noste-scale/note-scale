@@ -2,7 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { LESSONS, MAJOR_SCALES, createEmptyProgress, createExercise, recordAttempt } from "@notescale/music";
-import App, { ExerciseCard, ProgressContext, ProgressPage } from "./App";
+import App, * as application from "./App";
+import { ExerciseCard } from "./exercise-pages";
+import { ProgressContext, ProgressPage } from "./progress";
 import { getScale } from "./domain";
 
 function renderRoute(path: string): string {
@@ -14,6 +16,12 @@ function renderRoute(path: string): string {
 }
 
 describe("web route states", () => {
+  it("retains public application exports after extracting cohesive modules", () => {
+    expect(application.ExerciseCard).toBe(ExerciseCard);
+    expect(application.ProgressContext).toBe(ProgressContext);
+    expect(application.ProgressPage).toBe(ProgressPage);
+  });
+
   it("keeps primary navigation before main content on desktop while retaining one mobile tab bar", () => {
     const html = renderRoute("/");
     expect(html.match(/aria-label="Navigation principale"/g)).toHaveLength(1);

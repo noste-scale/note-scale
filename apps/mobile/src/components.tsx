@@ -1,10 +1,11 @@
 import type { Href } from "expo-router";
 import { Link } from "expo-router";
-import { normalizeNoteId, pitchClassOf } from "@notescale/music";
-import { useRef, type PropsWithChildren, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import type { PropsWithChildren, ReactNode } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "./theme";
+
+export { Piano } from "./piano";
 
 export function Screen({ children, title, subtitle, nativeHeader = false }: PropsWithChildren<{ title?: string; subtitle?: string; nativeHeader?: boolean }>) {
   const theme = useTheme();
@@ -180,107 +181,6 @@ export function Formula({ activeStep }: { activeStep?: number } = {}) {
   );
 }
 
-const pianoKeys = [
-  { id: "C", label: "Do", dark: false, position: 0 },
-  { id: "C#", label: "Do♯ / Ré♭", dark: true, position: 1 },
-  { id: "D", label: "Ré", dark: false, position: 1 },
-  { id: "D#", label: "Ré♯ / Mi♭", dark: true, position: 2 },
-  { id: "E", label: "Mi", dark: false, position: 2 },
-  { id: "F", label: "Fa", dark: false, position: 3 },
-  { id: "F#", label: "Fa♯ / Sol♭", dark: true, position: 4 },
-  { id: "G", label: "Sol", dark: false, position: 4 },
-  { id: "G#", label: "Sol♯ / La♭", dark: true, position: 5 },
-  { id: "A", label: "La", dark: false, position: 5 },
-  { id: "A#", label: "La♯ / Si♭", dark: true, position: 6 },
-  { id: "B", label: "Si", dark: false, position: 6 },
-] as const;
-
-const pitchClassForNote = (note: string): number | undefined => {
-  const normalizedNote = normalizeNoteId(note);
-  return normalizedNote ? pitchClassOf(normalizedNote) : undefined;
-};
-
-export function Piano({
-  activeNotes = [],
-  soundingPitch,
-  onPlayNote,
-}: {
-  activeNotes?: string[];
-  soundingPitch?: number | undefined;
-  onPlayNote: (note: string) => void;
-}) {
-  const theme = useTheme();
-  const { fontScale } = useWindowDimensions();
-  const fontSizeScale = Math.max(1, fontScale);
-  const whiteKeyWidth = 76 * fontSizeScale;
-  const blackKeyWidth = 48 * fontSizeScale;
-  const keyboardScroll = useRef<ScrollView>(null);
-  const viewportWidth = useRef(0);
-  const tonicKey = pianoKeys.find((key) => pitchClassForNote(key.id) === pitchClassForNote(activeNotes[0] ?? "C"));
-  const revealTonic = () => keyboardScroll.current?.scrollTo({
-    x: Math.max(0, (tonicKey?.position ?? 0) * whiteKeyWidth - viewportWidth.current / 2 + whiteKeyWidth / 2),
-    animated: false
-  });
-  const activePitches = new Set(activeNotes.flatMap((note) => {
-    const pitchClass = pitchClassForNote(note);
-    return pitchClass === undefined ? [] : [pitchClass];
-  }));
-  return (
-    <View accessibilityLabel="Clavier chromatique interactif">
-      <Body muted>En jaune : notes de la gamme. Fais glisser le clavier.</Body>
-      <ScrollView
-        ref={keyboardScroll}
-        horizontal
-        showsHorizontalScrollIndicator
-        onLayout={({ nativeEvent }) => {
-          viewportWidth.current = nativeEvent.layout.width;
-          revealTonic();
-        }}
-        onContentSizeChange={revealTonic}
-      >
-        <View style={{ width: 7 * whiteKeyWidth, height: 180 * fontSizeScale }}>
-          {pianoKeys.map((key) => {
-            const keyPitch = pitchClassForNote(key.id);
-            const isScaleNote = keyPitch !== undefined && activePitches.has(keyPitch);
-            const isSounding = keyPitch === soundingPitch;
-            let backgroundColor = key.dark ? "#182027" : "#FFFFFF";
-            let color = key.dark ? "#FFFFFF" : "#182027";
-            if (isScaleNote) {
-              backgroundColor = theme.accent;
-              color = "#182027";
-            }
-            if (isSounding) {
-              backgroundColor = theme.primary;
-              color = theme.primaryText;
-            }
-            return (
-              <Pressable
-                key={key.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${key.label}${isScaleNote ? ", note de la gamme" : ""}${isSounding ? ", en lecture" : ""}`}
-                accessibilityHint="Joue cette hauteur avec un fichier audio local"
-                accessibilityState={{ selected: isSounding }}
-                onPress={() => onPlayNote(key.id)}
-                style={({ pressed }) => [styles.key, {
-                  left: key.position * whiteKeyWidth - (key.dark ? blackKeyWidth / 2 : 0),
-                  width: key.dark ? blackKeyWidth : whiteKeyWidth,
-                  height: (key.dark ? 108 : 180) * fontSizeScale,
-                  zIndex: key.dark ? 1 : 0,
-                  backgroundColor,
-                  borderColor: isSounding ? theme.focus : theme.border,
-                  opacity: pressed ? 0.75 : 1
-                }]}
-              >
-                <Text style={[styles.keyText, { color }]}>{key.label.replace(" / ", "\n")}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
 export function Notice({ children, danger = false }: PropsWithChildren<{ danger?: boolean }>) {
   const theme = useTheme();
   return (
@@ -323,15 +223,5 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 16, fontWeight: "600", textAlign: "center" },
   formula: { fontSize: 24, fontWeight: "800", lineHeight: 34, textAlign: "center" },
-  key: {
-    position: "absolute",
-    top: 0,
-    alignItems: "center",
-    borderWidth: 1,
-    justifyContent: "flex-end",
-    paddingBottom: 8,
-    paddingHorizontal: 4
-  },
-  keyText: { fontSize: 12, fontWeight: "700", textAlign: "center" },
   notice: { borderLeftWidth: 4, paddingHorizontal: 14, paddingVertical: 10 },
 });

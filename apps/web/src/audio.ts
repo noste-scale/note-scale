@@ -37,7 +37,7 @@ export class WebScaleAudio {
   private currentVoice: AudioVoice | undefined;
   private isPaused = false;
   private playbackGeneration = 0;
-  private watchdog: ReturnType<typeof setTimeout> | undefined;
+  private watchdogTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly createVoice: VoiceFactory | null | undefined = defaultVoiceFactory(),
@@ -55,7 +55,7 @@ export class WebScaleAudio {
     if (activePlayer && activePlayer !== this) activePlayer.finishPlayback("preempted");
     if (this.active) this.finishPlayback("restarted");
 
-    const generation = ++this.playbackGeneration;
+    const playbackToken = ++this.playbackGeneration;
     try {
       const ascendingSequence = ascendingPitches(pitches);
       const playbackSequence = direction === "up" ? ascendingSequence : [...ascendingSequence].reverse();
@@ -65,7 +65,7 @@ export class WebScaleAudio {
         return voice;
       });
       activePlayer = this;
-      return this.startVoice(0, generation);
+      return this.startVoice(0, playbackToken);
     } catch {
       this.finishPlayback("error");
       this.onError?.();
@@ -75,14 +75,14 @@ export class WebScaleAudio {
 
   async pauseResume(): Promise<boolean> {
     const voice = this.currentVoice;
-    const generation = this.playbackGeneration;
+    const playbackToken = this.playbackGeneration;
     if (!voice) return false;
     try {
       if (this.isPaused) {
         await voice.play();
-        if (generation !== this.playbackGeneration || voice !== this.currentVoice) return this.active;
+        if (playbackToken !== this.playbackGeneration || voice !== this.currentVoice) return this.active;
         this.isPaused = false;
-        this.startWatchdog(generation, voice);
+        this.startWatchdog(playbackToken, voice);
       } else {
         voice.pause();
         this.isPaused = true;
@@ -90,7 +90,7 @@ export class WebScaleAudio {
       }
       return true;
     } catch {
-      if (generation === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
+      if (playbackToken === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
       return this.active;
     }
   }
@@ -122,42 +122,42 @@ export class WebScaleAudio {
     this.onError?.();
   }
 
-  private startVoice(index: number, generation: number): boolean {
-    if (generation !== this.playbackGeneration) return false;
-    const voice = this.voices[index];
+  private startVoice(voiceIndex: number, playbackToken: number): boolean {
+    if (playbackToken !== this.playbackGeneration) return false;
+    const voice = this.voices[voiceIndex];
     if (!voice) {
       this.finishPlayback("ended");
       return true;
     }
     this.currentVoice = voice;
     voice.onended = () => {
-      if (generation !== this.playbackGeneration || voice !== this.currentVoice) return;
+      if (playbackToken !== this.playbackGeneration || voice !== this.currentVoice) return;
       voice.onended = null;
       this.clearWatchdog();
-      this.startVoice(index + 1, generation);
+      this.startVoice(voiceIndex + 1, playbackToken);
     };
     try {
       void voice.play().catch(() => {
-        if (generation === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
+        if (playbackToken === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
       });
-      this.startWatchdog(generation, voice);
+      this.startWatchdog(playbackToken, voice);
       return true;
     } catch {
-      if (generation === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
+      if (playbackToken === this.playbackGeneration && voice === this.currentVoice) this.failPlayback();
       return false;
     }
   }
 
-  private startWatchdog(generation: number, voice: AudioVoice): void {
+  private startWatchdog(playbackToken: number, voice: AudioVoice): void {
     this.clearWatchdog();
-    this.watchdog = setTimeout(() => {
-      if (generation === this.playbackGeneration && voice === this.currentVoice && !this.isPaused) this.failPlayback();
+    this.watchdogTimer = setTimeout(() => {
+      if (playbackToken === this.playbackGeneration && voice === this.currentVoice && !this.isPaused) this.failPlayback();
     }, this.watchdogMs);
   }
 
   private clearWatchdog(): void {
-    if (this.watchdog !== undefined) clearTimeout(this.watchdog);
-    this.watchdog = undefined;
+    if (this.watchdogTimer !== undefined) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = undefined;
   }
 }
 

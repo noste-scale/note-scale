@@ -20,8 +20,8 @@ $signingProperties = Get-Content -Raw "$signingDirectory/release.properties" | C
 foreach ($propertyName in 'storeFile', 'storePassword', 'keyAlias', 'keyPassword') {
     if (-not $signingProperties[$propertyName]) { throw "Missing signing property: $propertyName" }
 }
-$keystore = Join-Path $signingDirectory $signingProperties.storeFile
-if (-not (Test-Path -LiteralPath $keystore)) { throw 'Release keystore missing.' }
+$keystorePath = Join-Path $signingDirectory $signingProperties.storeFile
+if (-not (Test-Path -LiteralPath $keystorePath)) { throw 'Release keystore missing.' }
 
 $previousPath = $env:PATH
 $previousNodeEnv = $env:NODE_ENV
@@ -39,24 +39,27 @@ try {
     & ./gradlew.bat --no-daemon --console=plain --max-workers=2 -I "$PSScriptRoot/android-release.gradle" :app:assembleRelease :app:bundleRelease
     if ($LASTEXITCODE -ne 0) { throw 'Android release build failed; previous output/android files are not a new release.' }
 
-    $apk = "$mobileDirectory/android/app/build/outputs/apk/release/app-release.apk"
-    $aab = "$mobileDirectory/android/app/build/outputs/bundle/release/app-release.aab"
-    $apkVerification = & "$env:ANDROID_HOME/build-tools/36.0.0/apksigner.bat" verify --print-certs $apk
+    $apkPath = "$mobileDirectory/android/app/build/outputs/apk/release/app-release.apk"
+    $aabPath = "$mobileDirectory/android/app/build/outputs/bundle/release/app-release.aab"
+    $apkVerification = & "$env:ANDROID_HOME/build-tools/36.0.0/apksigner.bat" verify --print-certs $apkPath
     if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed.' }
     $env:NOTESCALE_STORE_PASSWORD = $signingProperties.storePassword
-    $aabVerification = & "$env:JAVA_HOME/bin/jarsigner.exe" '-J-Duser.language=en' -verify -strict -keystore $keystore -storepass:env NOTESCALE_STORE_PASSWORD $aab $signingProperties.keyAlias
+    $aabVerification = & "$env:JAVA_HOME/bin/jarsigner.exe" '-J-Duser.language=en' -verify -strict -keystore $keystorePath -storepass:env NOTESCALE_STORE_PASSWORD $aabPath $signingProperties.keyAlias
     if ($LASTEXITCODE -ne 0 -or "$aabVerification" -notmatch 'jar verified') { throw 'AAB signature verification failed.' }
-    $releaseCertificate = & "$env:JAVA_HOME/bin/keytool.exe" '-J-Duser.language=en' -list -v -keystore $keystore -alias $signingProperties.keyAlias -storepass:env NOTESCALE_STORE_PASSWORD
+    $releaseCertificate = & "$env:JAVA_HOME/bin/keytool.exe" '-J-Duser.language=en' -list -v -keystore $keystorePath -alias $signingProperties.keyAlias -storepass:env NOTESCALE_STORE_PASSWORD
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect signing certificate.' }
-    $aabCertificate = & "$env:JAVA_HOME/bin/keytool.exe" '-J-Duser.language=en' -printcert -jarfile $aab
+    $aabCertificate = & "$env:JAVA_HOME/bin/keytool.exe" '-J-Duser.language=en' -printcert -jarfile $aabPath
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect AAB certificate.' }
     $releaseFingerprint = [regex]::Match(($releaseCertificate -join "`n"), 'SHA256: ([A-Fa-f0-9:]+)').Groups[1].Value.Replace(':', '').ToLowerInvariant()
-    if ($releaseFingerprint.Length -ne 64 -or ($apkVerification -join '').ToLowerInvariant() -notmatch $releaseFingerprint -or ($aabCertificate -join '').Replace(':', '').ToLowerInvariant() -notmatch $releaseFingerprint) {
+    $hasValidReleaseFingerprint = $releaseFingerprint.Length -eq 64
+    $apkUsesReleaseCertificate = ($apkVerification -join '').ToLowerInvariant() -match $releaseFingerprint
+    $aabUsesReleaseCertificate = ($aabCertificate -join '').Replace(':', '').ToLowerInvariant() -match $releaseFingerprint
+    if (-not $hasValidReleaseFingerprint -or -not $apkUsesReleaseCertificate -or -not $aabUsesReleaseCertificate) {
         throw 'APK/AAB certificate differs from the saved release key.'
     }
     New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
-    Copy-Item -LiteralPath $apk -Destination "$outputDirectory/notescale-release.apk"
-    Copy-Item -LiteralPath $aab -Destination "$outputDirectory/notescale-release.aab"
+    Copy-Item -LiteralPath $apkPath -Destination "$outputDirectory/notescale-release.apk"
+    Copy-Item -LiteralPath $aabPath -Destination "$outputDirectory/notescale-release.aab"
     Get-FileHash "$outputDirectory/notescale-release.apk", "$outputDirectory/notescale-release.aab" -Algorithm SHA256 |
         ForEach-Object { "$($_.Hash.ToLowerInvariant())  $(Split-Path $_.Path -Leaf)" } |
         Set-Content "$outputDirectory/SHA256SUMS.txt" -Encoding utf8

@@ -5,7 +5,7 @@ import { getScale } from "../../src/domain";
 
 export default function ScaleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const focused = useIsFocused();
+  const isScreenFocused = useIsFocused();
   const scale = getScale(id);
   if (!scale) return (
     <Screen nativeHeader title="Gamme introuvable">
@@ -25,7 +25,7 @@ export default function ScaleDetailScreen() {
         <Formula />
         <Body>{scale.construction.map((step) => `${step.currentNote} → ${step.interval} → `).join("")}{scale.notes[7]}</Body>
       </Card>
-      {focused ? <AudioControls notes={scale.notes} piano scaleLabel={scale.frenchName} /> : null}
+      {isScreenFocused ? <AudioControls notes={scale.notes} piano scaleLabel={scale.frenchName} /> : null}
       <RouteAction href={{ pathname: "/(tabs)/exercises", params: { scaleId: scale.id } }} label="Exercice sur cette gamme" />
     </Screen>
   );

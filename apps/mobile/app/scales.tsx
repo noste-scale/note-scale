@@ -7,7 +7,7 @@ import { useTheme } from "../src/theme";
 
 export default function ScalesScreen() {
   const theme = useTheme();
-  const focused = useIsFocused();
+  const isScreenFocused = useIsFocused();
   return (
     <Screen nativeHeader subtitle="15 écritures conventionnelles, de Do majeur à Do♭ majeur.">
       <RouteAction href="/generator" label="Construire une gamme pas à pas" secondary />
@@ -20,7 +20,7 @@ export default function ScalesScreen() {
           <Heading>{scale.frenchName}</Heading>
           <Body muted>{scale.keySignatureCount === 0 ? "Aucune altération" : `${scale.keySignatureCount} altération${scale.keySignatureCount > 1 ? "s" : ""} : ${scale.accidentals.join(", ")}`}</Body>
           <Row>
-            {focused ? <AudioControls notes={scale.notes} compact scaleLabel={scale.frenchName} /> : null}
+            {isScreenFocused ? <AudioControls notes={scale.notes} compact scaleLabel={scale.frenchName} /> : null}
             <RouteAction
               href={{ pathname: "/scale/[id]", params: { id: scale.id } }}
               label="Voir la construction"

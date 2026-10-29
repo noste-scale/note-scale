@@ -18,7 +18,7 @@ function createSequenceRandom(values: readonly number[]) {
 }
 
 describe("exercise generation and grading", () => {
-  const types: readonly ExerciseType[] = [
+  const exerciseTypes: readonly ExerciseType[] = [
     "complete-scale",
     "build-scale",
     "find-accidentals",
@@ -27,7 +27,7 @@ describe("exercise generation and grading", () => {
   ];
 
   it("creates all five exercise kinds without revealing answers in the question", () => {
-    for (const type of types) {
+    for (const type of exerciseTypes) {
       const exercise = createExercise(type, getMajorScale("D"), () => 0.25);
       expect(exercise.type).toBe(type);
       expect(exercise.correctAnswer.length).toBeGreaterThan(0);
@@ -72,9 +72,9 @@ describe("exercise generation and grading", () => {
     const exercise = createExercise("find-accidentals", getMajorScale("E"), () => 0);
     expect(gradeExercise(exercise, ["D#", "G#", "C#", "F#"]).correct).toBe(true);
     expect(gradeExercise(exercise, ["D#", "G#", "C#", "Gb"]).errors.length).toBeGreaterThan(0);
-    const noAccidentals = createExercise("find-accidentals", getMajorScale("C"), () => 0);
-    expect(noAccidentals.correctAnswer).toEqual(["aucune"]);
-    expect(gradeExercise(noAccidentals, ["Aucune"]).correct).toBe(true);
+    const noAccidentalsExercise = createExercise("find-accidentals", getMajorScale("C"), () => 0);
+    expect(noAccidentalsExercise.correctAnswer).toEqual(["aucune"]);
+    expect(gradeExercise(noAccidentalsExercise, ["Aucune"]).correct).toBe(true);
   });
 
   it("leaves empty or malformed answers ungraded with accessible French validation", () => {

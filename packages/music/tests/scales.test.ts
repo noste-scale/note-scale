@@ -38,12 +38,12 @@ describe("major-scale generation", () => {
   it("preserves seven diatonic letters and the major interval pattern", () => {
     for (const scale of MAJOR_SCALES) {
       expect(new Set(scale.notes.slice(0, 7).map((note) => note[0])).size).toBe(7);
-      const distances = scale.notes.slice(0, -1).map((note, index) => {
+      const intervalSemitones = scale.notes.slice(0, -1).map((note, index) => {
         const nextNote = scale.notes[index + 1];
         if (!nextNote) throw new Error("missing note");
         return (pitchClassOf(nextNote) - pitchClassOf(note) + 12) % 12;
       });
-      expect(distances).toEqual(MAJOR_INTERVALS);
+      expect(intervalSemitones).toEqual(MAJOR_INTERVALS);
       expect(scale.notes.at(-1)).toBe(scale.tonic);
       expect(scale.construction).toHaveLength(7);
     }

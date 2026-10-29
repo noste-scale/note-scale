@@ -12,17 +12,17 @@ gradle.beforeProject { project ->
                 }
                 def signingProperties = new Properties()
                 signingPropertiesFile.withInputStream { inputStream -> signingProperties.load(inputStream) }
-                ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { name ->
-                    if (!signingProperties.getProperty(name)?.trim()) {
-                        throw new GradleException("Missing signing property: ${name}")
+                ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { propertyName ->
+                    if (!signingProperties.getProperty(propertyName)?.trim()) {
+                        throw new GradleException("Missing signing property: ${propertyName}")
                     }
                 }
-                def keystore = new File(signingPropertiesFile.parentFile, signingProperties.getProperty('storeFile')).canonicalFile
-                if (!keystore.isFile()) {
+                def keystoreFile = new File(signingPropertiesFile.parentFile, signingProperties.getProperty('storeFile')).canonicalFile
+                if (!keystoreFile.isFile()) {
                     throw new GradleException('Release keystore missing. Restore the original signing backup.')
                 }
                 def releaseSigningConfig = android.signingConfigs.maybeCreate('notescaleRelease')
-                releaseSigningConfig.storeFile = keystore
+                releaseSigningConfig.storeFile = keystoreFile
                 releaseSigningConfig.storePassword = signingProperties.getProperty('storePassword')
                 releaseSigningConfig.keyAlias = signingProperties.getProperty('keyAlias')
                 releaseSigningConfig.keyPassword = signingProperties.getProperty('keyPassword')

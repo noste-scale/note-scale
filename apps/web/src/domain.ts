@@ -11,17 +11,17 @@ export interface UiScale {
   steps: string[];
 }
 
-function toScale(scale: MajorScale): UiScale {
+function createScaleView(scale: MajorScale): UiScale {
   return {
     id: scale.id,
     frenchName: scale.frenchName,
     internationalName: scale.internationalName,
-    notes: scale.notes.map((id) => ({ id, label: formatNote(id), pitch: pitchClassOf(id) })),
-    accidentals: scale.accidentals.map((id) => formatNote(id)),
+    notes: scale.notes.map((noteId) => ({ id: noteId, label: formatNote(noteId), pitch: pitchClassOf(noteId) })),
+    accidentals: scale.accidentals.map((noteId) => formatNote(noteId)),
     keySignatureCount: scale.keySignatureCount,
     steps: scale.construction.map((step) => step.explanation),
   };
 }
 
-export const scales = MAJOR_SCALES.map(toScale);
+export const scales = MAJOR_SCALES.map(createScaleView);
 export const getScale = (id: string) => scales.find((scale) => scale.id === id);

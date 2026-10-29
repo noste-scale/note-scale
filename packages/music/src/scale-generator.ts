@@ -30,21 +30,21 @@ const ENHARMONIC_SUGGESTIONS: Readonly<Record<string, TonicId>> = {
   "A#": "Bb",
 };
 
-function findAlteration(targetPitch: number, letter: NoteLetter): -1 | 0 | 1 | null {
-  let pitchDifference = (targetPitch - NATURAL_PITCH_CLASSES[letter] + 12) % 12;
+function findAlteration(targetPitchClass: number, letter: NoteLetter): -1 | 0 | 1 | null {
+  let pitchDifference = (targetPitchClass - NATURAL_PITCH_CLASSES[letter] + 12) % 12;
   if (pitchDifference > 6) pitchDifference -= 12;
   return pitchDifference === -1 || pitchDifference === 0 || pitchDifference === 1 ? pitchDifference : null;
 }
 
-function createUnsupportedTonicResult(input: string, normalized: NoteId | null): ScaleGenerationResult {
-  const suggestion = normalized ? ENHARMONIC_SUGGESTIONS[normalized] : undefined;
+function createUnsupportedTonicResult(input: string, normalizedTonic: NoteId | null): ScaleGenerationResult {
+  const suggestion = normalizedTonic ? ENHARMONIC_SUGGESTIONS[normalizedTonic] : undefined;
   return {
     ok: false,
     error: {
       code: "UNSUPPORTED_TONIC",
       input,
       message: suggestion
-        ? `${formatNote(normalized ?? input, "fr")} n’est pas proposé dans ce MVP. Essaie ${formatNote(suggestion, "fr")}.`
+        ? `${formatNote(normalizedTonic ?? input, "fr")} n’est pas proposé dans ce MVP. Essaie ${formatNote(suggestion, "fr")}.`
         : "Cette tonique n’est pas prise en charge. Choisis l’une des 15 tonalités proposées.",
       ...(suggestion ? { suggestion } : {}),
     },
@@ -52,12 +52,12 @@ function createUnsupportedTonicResult(input: string, normalized: NoteId | null):
 }
 
 export function generateMajorScale(input: string): ScaleGenerationResult {
-  const normalized = normalizeNoteId(input);
-  if (!normalized || !isTonicId(normalized)) return createUnsupportedTonicResult(input, normalized);
+  const normalizedTonic = normalizeNoteId(input);
+  if (!normalizedTonic || !isTonicId(normalizedTonic)) return createUnsupportedTonicResult(input, normalizedTonic);
 
-  const tonic = normalized;
+  const tonic = normalizedTonic;
   const tonicLetterIndex = NOTE_LETTERS.indexOf(tonic[0] as NoteLetter);
-  const tonicPitch = pitchClassOf(tonic);
+  const tonicPitchClass = pitchClassOf(tonic);
   const notes: NoteId[] = [];
 
   for (let index = 0; index < MAJOR_OFFSETS.length; index += 1) {
@@ -67,21 +67,21 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
     }
     const letter = NOTE_LETTERS[(tonicLetterIndex + index) % NOTE_LETTERS.length];
     const offset = MAJOR_OFFSETS[index];
-    if (!letter || offset === undefined) return createUnsupportedTonicResult(input, normalized);
-    const alteration = findAlteration((tonicPitch + offset) % 12, letter);
-    if (alteration === null) return createUnsupportedTonicResult(input, normalized);
+    if (!letter || offset === undefined) return createUnsupportedTonicResult(input, normalizedTonic);
+    const alteration = findAlteration((tonicPitchClass + offset) % 12, letter);
+    if (alteration === null) return createUnsupportedTonicResult(input, normalizedTonic);
     notes.push(noteIdFor(letter, alteration));
   }
 
   const metadata = getScaleMetadata(tonic);
-  const signature = metadata.signature;
+  const signedAccidentalCount = metadata.signature;
   let accidentals: readonly NoteId[] = [];
   let accidentalType: MajorScale["accidentalType"] = "none";
-  if (signature > 0) {
-    accidentals = SHARP_ORDER.slice(0, signature);
+  if (signedAccidentalCount > 0) {
+    accidentals = SHARP_ORDER.slice(0, signedAccidentalCount);
     accidentalType = "sharp";
-  } else if (signature < 0) {
-    accidentals = FLAT_ORDER.slice(0, -signature);
+  } else if (signedAccidentalCount < 0) {
+    accidentals = FLAT_ORDER.slice(0, -signedAccidentalCount);
     accidentalType = "flat";
   }
   const construction: ConstructionStep[] = MAJOR_INTERVALS.map((semitones, index) => {
@@ -119,7 +119,7 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
       notes,
       accidentals,
       accidentalType,
-      keySignatureCount: Math.abs(signature),
+      keySignatureCount: Math.abs(signedAccidentalCount),
       construction,
     },
   };
@@ -134,8 +134,8 @@ export function getMajorScale(tonic: TonicId): MajorScale {
 export const MAJOR_SCALES: readonly MajorScale[] = SCALE_CATALOG.map(({ id }) => getMajorScale(id));
 
 export function getScaleById(id: string): MajorScale | undefined {
-  const normalized = normalizeNoteId(id);
-  return normalized && isTonicId(normalized) ? MAJOR_SCALES.find((scale) => scale.id === normalized) : undefined;
+  const normalizedTonic = normalizeNoteId(id);
+  return normalizedTonic && isTonicId(normalizedTonic) ? MAJOR_SCALES.find((scale) => scale.id === normalizedTonic) : undefined;
 }
 
 export function scalePitchIds(scale: MajorScale, direction: "ascending" | "descending" = "ascending"): readonly number[] {

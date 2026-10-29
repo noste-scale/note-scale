@@ -46,10 +46,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   )).current;
   useEffect(() => {
     const loadRevision = preferenceRevision.current;
-    AsyncStorage.getItem("notescale.theme").then((value) => {
-      if (shouldApplyStoredPreference(loadRevision, preferenceRevision.current) && (value === "system" || value === "light" || value === "dark")) {
-        preferenceRef.current = value;
-        setPreference(value);
+    AsyncStorage.getItem("notescale.theme").then((storedPreference) => {
+      if (shouldApplyStoredPreference(loadRevision, preferenceRevision.current) && (storedPreference === "system" || storedPreference === "light" || storedPreference === "dark")) {
+        preferenceRef.current = storedPreference;
+        setPreference(storedPreference);
       }
     }).catch(() => undefined);
   }, []);
@@ -61,22 +61,22 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     void savePreference(nextPreference).catch(() => undefined);
   };
   const theme = preference === "dark" || (preference === "system" && systemColorScheme === "dark") ? dark : light;
-  const value = useMemo(() => ({ theme, preference, cyclePreference }), [preference, theme]);
+  const contextValue = useMemo(() => ({ theme, preference, cyclePreference }), [preference, theme]);
   return (
-    <ThemeContext.Provider value={value}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
 export function useTheme(): Theme {
-  const context = useContext(ThemeContext);
+  const themeContext = useContext(ThemeContext);
   const systemColorScheme = useColorScheme();
-  return context?.theme ?? (systemColorScheme === "dark" ? dark : light);
+  return themeContext?.theme ?? (systemColorScheme === "dark" ? dark : light);
 }
 
 export function useThemePreference(): Pick<ThemeContextValue, "preference" | "cyclePreference"> {
-  const context = useContext(ThemeContext);
-  if (!context) throw new Error("useThemePreference must be used inside ThemeProvider");
-  return context;
+  const themeContext = useContext(ThemeContext);
+  if (!themeContext) throw new Error("useThemePreference must be used inside ThemeProvider");
+  return themeContext;
 }

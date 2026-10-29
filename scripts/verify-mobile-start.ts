@@ -90,9 +90,9 @@ function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
 }
 
 async function waitForGroupExit(pid: number, timeoutMs: number): Promise<boolean> {
-  const deadline = performance.now() + timeoutMs;
+  const exitDeadlineMs = performance.now() + timeoutMs;
   while (isProcessGroupRunning(pid)) {
-    if (performance.now() >= deadline) return false;
+    if (performance.now() >= exitDeadlineMs) return false;
     await delay(50);
   }
   return true;
@@ -178,10 +178,10 @@ async function drainOutput(expoProcess: ChildProcess): Promise<void> {
 }
 
 function appendDiagnosticOutput(current: string, chunk: string, truncated: boolean): [string, boolean] {
-  const combined = current + chunk;
-  return combined.length > diagnosticCharacterLimit
-    ? [combined.slice(-diagnosticCharacterLimit), true]
-    : [combined, truncated];
+  const combinedOutput = current + chunk;
+  return combinedOutput.length > diagnosticCharacterLimit
+    ? [combinedOutput.slice(-diagnosticCharacterLimit), true]
+    : [combinedOutput, truncated];
 }
 
 function renderOutput(output: string, truncated: boolean): string {
@@ -266,33 +266,33 @@ function assertExpoIsActive(phase: string): void {
 
 let verificationFailure: unknown;
 try {
-  const deadline = performance.now() + startupTimeoutMs;
+  const startupDeadlineMs = performance.now() + startupTimeoutMs;
   while (true) {
     assertExpoIsActive("before Metro became healthy");
-    const remainingStartupMs = deadline - performance.now();
+    const remainingStartupMs = startupDeadlineMs - performance.now();
     if (remainingStartupMs <= 0) {
       throw new Error(`Metro did not become healthy within ${startupTimeoutMs / 1_000} seconds.`);
     }
     const metroIsReady = await isMetroHealthy(port, Math.min(1_000, remainingStartupMs));
     assertExpoIsActive("before Metro became healthy");
-    if (performance.now() > deadline) {
+    if (performance.now() > startupDeadlineMs) {
       throw new Error(`Metro did not become healthy within ${startupTimeoutMs / 1_000} seconds.`);
     }
     if (metroIsReady) break;
-    const remaining = Math.max(1, deadline - performance.now());
-    if (await waitForExit(expoProcess, Math.min(pollIntervalMs, remaining))) assertExpoIsActive("before Metro became healthy");
+    const remainingStartupPollMs = Math.max(1, startupDeadlineMs - performance.now());
+    if (await waitForExit(expoProcess, Math.min(pollIntervalMs, remainingStartupPollMs))) assertExpoIsActive("before Metro became healthy");
   }
 
-  const stableUntil = performance.now() + stabilityWindowMs;
-  while (performance.now() < stableUntil) {
+  const stabilityDeadlineMs = performance.now() + stabilityWindowMs;
+  while (performance.now() < stabilityDeadlineMs) {
     assertExpoIsActive("during the stability window");
     // The observation deadline must not shrink a healthy response's timeout to 1 ms.
     if (!await isMetroHealthy(port)) {
       throw new Error("Metro stopped reporting healthy during the stability window.");
     }
     assertExpoIsActive("during the stability window");
-    const remaining = stableUntil - performance.now();
-    if (remaining > 0 && await waitForExit(expoProcess, Math.min(pollIntervalMs, remaining))) {
+    const remainingStabilityMs = stabilityDeadlineMs - performance.now();
+    if (remainingStabilityMs > 0 && await waitForExit(expoProcess, Math.min(pollIntervalMs, remainingStabilityMs))) {
       assertExpoIsActive("during the stability window");
     }
   }

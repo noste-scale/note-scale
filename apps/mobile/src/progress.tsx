@@ -44,7 +44,7 @@ export function ProgressProvider({ children }: PropsWithChildren) {
   const [lastLessonId, setLastLessonId] = useState<string>();
   const [lessonHydrated, setLessonHydrated] = useState(false);
   const [lessonWarning, setLessonWarning] = useState<string>();
-  const lessonRevision = useRef(0);
+  const lessonBookmarkRevision = useRef(0);
   const progressRef = useRef(progress);
   const hydratedRef = useRef(false);
   const canSaveRef = useRef(false);
@@ -70,50 +70,54 @@ export function ProgressProvider({ children }: PropsWithChildren) {
   }, [saveProgress]);
 
   useEffect(() => {
-    let active = true;
+    let isEffectActive = true;
     mountedRef.current = true;
-    loadProgressWithRetry(() => safeLoadProgress(storage)).then((result) => {
-      if (!active) return;
+    loadProgressWithRetry(() => safeLoadProgress(storage)).then((loadedProgress) => {
+      if (!isEffectActive) return;
       const pendingAttempts = pendingAttemptsRef.current;
       pendingAttemptsRef.current = [];
-      const hydration = resolveHydration(result, pendingAttempts);
+      const hydration = resolveHydration(loadedProgress, pendingAttempts);
       progressRef.current = hydration.progress;
-      canSaveRef.current = result.canSave;
+      canSaveRef.current = loadedProgress.canSave;
       hydratedRef.current = true;
       setProgress(hydration.progress);
-      setWarning(result.warning ?? undefined);
+      setWarning(loadedProgress.warning ?? undefined);
       setHydrated(true);
       if (hydration.shouldSave) persistProgress(hydration.progress);
     });
     return () => {
-      active = false;
+      isEffectActive = false;
       mountedRef.current = false;
     };
   }, [persistProgress]);
 
   useEffect(() => {
-    let active = true;
-    const revision = lessonRevision.current;
-    void withTimeout(AsyncStorage.getItem("notescale.lesson.v1"), STORAGE_OPERATION_TIMEOUT_MS).then((id) => {
-      if (active && revision === lessonRevision.current && id && lessons.some((lesson) => lesson.id === id)) setLastLessonId(id);
+    let isEffectActive = true;
+    const bookmarkRevision = lessonBookmarkRevision.current;
+    void withTimeout(AsyncStorage.getItem("notescale.lesson.v1"), STORAGE_OPERATION_TIMEOUT_MS).then((storedLessonId) => {
+      if (!isEffectActive) return;
+      if (bookmarkRevision !== lessonBookmarkRevision.current) return;
+      if (!storedLessonId) return;
+      if (!lessons.some((lesson) => lesson.id === storedLessonId)) return;
+      setLastLessonId(storedLessonId);
     }).catch(() => {
-      if (active && revision === lessonRevision.current) setLessonWarning("La dernière leçon n’a pas pu être retrouvée. Tu peux toujours choisir une leçon.");
+      if (isEffectActive && bookmarkRevision === lessonBookmarkRevision.current) setLessonWarning("La dernière leçon n’a pas pu être retrouvée. Tu peux toujours choisir une leçon.");
     }).finally(() => {
-      if (active) setLessonHydrated(true);
+      if (isEffectActive) setLessonHydrated(true);
     });
     return () => {
-      active = false;
+      isEffectActive = false;
     };
   }, []);
 
   const rememberLesson = useCallback((id: string) => {
     if (!lessons.some((lesson) => lesson.id === id)) return;
-    const revision = ++lessonRevision.current;
+    const bookmarkRevision = ++lessonBookmarkRevision.current;
     setLastLessonId(id);
     void saveLessonBookmark(id).then(() => {
-      if (mountedRef.current && revision === lessonRevision.current) setLessonWarning(undefined);
+      if (mountedRef.current && bookmarkRevision === lessonBookmarkRevision.current) setLessonWarning(undefined);
     }).catch(() => {
-      if (mountedRef.current && revision === lessonRevision.current) setLessonWarning("La reprise de cette leçon n’a pas été enregistrée. Les leçons restent accessibles.");
+      if (mountedRef.current && bookmarkRevision === lessonBookmarkRevision.current) setLessonWarning("La reprise de cette leçon n’a pas été enregistrée. Les leçons restent accessibles.");
     });
   }, [saveLessonBookmark]);
 
@@ -136,7 +140,7 @@ export function ProgressProvider({ children }: PropsWithChildren) {
     persistProgress(updatedProgress);
   }, [persistProgress]);
 
-  const value = useMemo<ProgressContextValue>(() => ({
+  const contextValue = useMemo<ProgressContextValue>(() => ({
     progress,
     hydrated,
     ...(warning ? { warning } : {}),
@@ -147,14 +151,14 @@ export function ProgressProvider({ children }: PropsWithChildren) {
     rememberLesson,
   }), [hydrated, progress, recordAttempt, warning, lastLessonId, lessonHydrated, lessonWarning, rememberLesson]);
   return (
-    <ProgressContext.Provider value={value}>
+    <ProgressContext.Provider value={contextValue}>
       {children}
     </ProgressContext.Provider>
   );
 }
 
 export function useProgress(): ProgressContextValue {
-  const context = useContext(ProgressContext);
-  if (!context) throw new Error("useProgress must be used inside ProgressProvider");
-  return context;
+  const progressContext = useContext(ProgressContext);
+  if (!progressContext) throw new Error("useProgress must be used inside ProgressProvider");
+  return progressContext;
 }

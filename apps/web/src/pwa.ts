@@ -1,12 +1,12 @@
-function configuredBase(value: string | undefined): string | undefined {
-  const path = value?.trim();
-  if (!path) return undefined;
-  if (path === "/") return "/";
-  return `/${path.replace(/^\/+|\/+$/g, "")}/`;
+function normalizeConfiguredBase(value: string | undefined): string | undefined {
+  const basePath = value?.trim();
+  if (!basePath) return undefined;
+  if (basePath === "/") return "/";
+  return `/${basePath.replace(/^\/+|\/+$/g, "")}/`;
 }
 
 export function pagesBase(repository: string | undefined, actions: string | undefined, explicit: string | undefined = undefined): string {
-  const configuredPath = configuredBase(explicit);
+  const configuredPath = normalizeConfiguredBase(explicit);
   if (configuredPath) return configuredPath;
   const repositoryName = repository?.split("/")[1];
   return actions && repositoryName && !repositoryName.endsWith(".github.io") ? `/${repositoryName}/` : "/";

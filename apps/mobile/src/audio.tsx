@@ -14,7 +14,8 @@ import {
   type SampleKey,
   type SequencedPitch,
 } from "./audio-model";
-import { Action, Body, Card, Heading, Notice, Piano, Row } from "./components";
+import { Action, Body, Card, Heading, Notice, Row } from "./components";
+import { Piano } from "./piano";
 
 interface ActivePlayback {
   playbackOwner: symbol;
@@ -51,14 +52,14 @@ const samples: Record<SampleKey, number> = {
   B5: require("../assets/audio/B5.wav"),
 };
 
-function pitchClassForNote(note: string): number | undefined {
-  const id = normalizeNoteId(note);
-  return id ? pitchClassOf(id) : undefined;
+function getNotePitchClass(note: string): number | undefined {
+  const noteId = normalizeNoteId(note);
+  return noteId ? pitchClassOf(noteId) : undefined;
 }
 
 function createPitchSequence(notes: readonly string[], direction: "up" | "down"): SequencedPitch[] {
   return orderedPitchSequence(notes.flatMap((note) => {
-    const pitchClass = pitchClassForNote(note);
+    const pitchClass = getNotePitchClass(note);
     return pitchClass === undefined ? [] : [pitchClass];
   }), direction);
 }
@@ -76,8 +77,8 @@ export function AudioControls({
 }) {
   const player = useAudioPlayer(null);
   const playbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const noteDeadline = useRef(0);
-  const remainingNoteDuration = useRef(0);
+  const noteDeadlineMs = useRef(0);
+  const remainingNoteDurationMs = useRef(0);
   const currentNoteIndex = useRef(0);
   const pitchSequence = useRef<SequencedPitch[]>([]);
   const playbackGeneration = useRef(0);
@@ -93,7 +94,7 @@ export function AudioControls({
   const configurationKey = playbackConfigurationKey(notes, direction, slow);
   const previousConfigurationKey = useRef(configurationKey);
 
-  const updatePhase = (event: PlaybackEvent) => {
+  const updatePlaybackPhase = (event: PlaybackEvent) => {
     const nextPhase = transitionPlayback(playbackPhaseRef.current, event);
     playbackPhaseRef.current = nextPhase;
     setPlaybackPhase(nextPhase);
@@ -111,7 +112,7 @@ export function AudioControls({
   const resetPlayer = () => {
     playbackGeneration.current += 1;
     clearPlaybackTimer();
-    remainingNoteDuration.current = 0;
+    remainingNoteDurationMs.current = 0;
     currentNoteIndex.current = 0;
     pitchSequence.current = [];
     player.pause();
@@ -122,7 +123,7 @@ export function AudioControls({
 
   const stopPlayback = (event: "stop" | "preempt" = "stop") => {
     resetPlayer();
-    updatePhase(event);
+    updatePlaybackPhase(event);
     setPlaybackMessage({
       text: event === "preempt" ? "Lecture interrompue par une autre lecture." : "Lecture arrêtée.",
       danger: false,
@@ -132,39 +133,39 @@ export function AudioControls({
   const completePlayback = (playbackToken: number) => {
     if (playbackToken !== playbackGeneration.current) return;
     clearPlaybackTimer();
-    remainingNoteDuration.current = 0;
+    remainingNoteDurationMs.current = 0;
     setSoundingPitch(undefined);
-    updatePhase("complete");
+    updatePlaybackPhase("complete");
     setPlaybackMessage({ text: "Lecture terminée.", danger: false });
     releaseOwnership();
   };
 
-  const playNoteAtIndex = (index: number, playbackToken: number) => {
+  const playNoteAtIndex = (noteIndex: number, playbackToken: number) => {
     if (playbackToken !== playbackGeneration.current) return;
-    const sequencedPitch = pitchSequence.current[index];
+    const sequencedPitch = pitchSequence.current[noteIndex];
     const sampleSource = sequencedPitch ? samples[sequencedPitch.sampleKey] : undefined;
     if (!sequencedPitch || sampleSource === undefined) {
       resetPlayer();
-      updatePhase("stop");
+      updatePlaybackPhase("stop");
       setPlaybackMessage({ text: "Cette note ne peut pas être lue. Réessaie avec une autre gamme.", danger: true });
       return;
     }
     try {
-      currentNoteIndex.current = index;
+      currentNoteIndex.current = noteIndex;
       player.replace(sampleSource);
       player.setPlaybackRate(slow ? 0.75 : 1);
       player.play();
       setSoundingPitch(sequencedPitch.pitchClass);
       const noteDurationMs = slow ? 1100 : 650;
-      remainingNoteDuration.current = noteDurationMs;
-      noteDeadline.current = Date.now() + noteDurationMs;
+      remainingNoteDurationMs.current = noteDurationMs;
+      noteDeadlineMs.current = Date.now() + noteDurationMs;
       playbackTimer.current = setTimeout(() => {
-        if (index + 1 < pitchSequence.current.length) playNoteAtIndex(index + 1, playbackToken);
+        if (noteIndex + 1 < pitchSequence.current.length) playNoteAtIndex(noteIndex + 1, playbackToken);
         else completePlayback(playbackToken);
       }, noteDurationMs);
     } catch {
       resetPlayer();
-      updatePhase("stop");
+      updatePlaybackPhase("stop");
       setPlaybackMessage({ text: "La lecture a échoué. Les autres contrôles restent disponibles.", danger: true });
     }
   };
@@ -173,14 +174,14 @@ export function AudioControls({
     if (activePlayback?.playbackOwner !== playbackOwner.current) activePlayback?.preempt();
     resetPlayer();
     if (nextSequence.length === 0) {
-      updatePhase("stop");
+      updatePlaybackPhase("stop");
       setPlaybackMessage({ text: "Aucune note lisible n’est disponible.", danger: true });
       return;
     }
     pitchSequence.current = nextSequence;
     activePlayback = { playbackOwner: playbackOwner.current, preempt: () => stopPlayback("preempt") };
     setPlaybackMessage(undefined);
-    updatePhase(restart ? "restart" : "start");
+    updatePlaybackPhase(restart ? "restart" : "start");
     const playbackToken = playbackGeneration.current;
     playNoteAtIndex(0, playbackToken);
   };
@@ -188,7 +189,7 @@ export function AudioControls({
   const startPlayback = () => startSequence(createPitchSequence(notes, direction), playbackPhaseRef.current !== "stopped");
 
   const playSingleNote = (note: string) => {
-    const pitchClass = pitchClassForNote(note);
+    const pitchClass = getNotePitchClass(note);
     const sampleKey = pitchClass === undefined ? undefined : sampleKeyForPitch(pitchClass, 4);
     if (pitchClass === undefined || !sampleKey) {
       setPlaybackMessage({ text: "Cette note ne peut pas être lue.", danger: true });
@@ -199,10 +200,10 @@ export function AudioControls({
 
   const pausePlayback = () => {
     if (playbackPhaseRef.current !== "playing") return;
-    remainingNoteDuration.current = Math.max(0, noteDeadline.current - Date.now());
+    remainingNoteDurationMs.current = Math.max(0, noteDeadlineMs.current - Date.now());
     clearPlaybackTimer();
     player.pause();
-    updatePhase("pause");
+    updatePlaybackPhase("pause");
     setPlaybackMessage({ text: "Lecture en pause.", danger: false });
   };
 
@@ -210,14 +211,14 @@ export function AudioControls({
     if (playbackPhaseRef.current !== "paused") return;
     try {
       player.play();
-      updatePhase("resume");
+      updatePlaybackPhase("resume");
       setPlaybackMessage(undefined);
       const playbackToken = playbackGeneration.current;
-      const noteDurationMs = remainingNoteDuration.current;
-      noteDeadline.current = Date.now() + noteDurationMs;
+      const noteDurationMs = remainingNoteDurationMs.current;
+      noteDeadlineMs.current = Date.now() + noteDurationMs;
       playbackTimer.current = setTimeout(() => {
-        const index = currentNoteIndex.current;
-        if (index + 1 < pitchSequence.current.length) playNoteAtIndex(index + 1, playbackToken);
+        const noteIndex = currentNoteIndex.current;
+        if (noteIndex + 1 < pitchSequence.current.length) playNoteAtIndex(noteIndex + 1, playbackToken);
         else completePlayback(playbackToken);
       }, noteDurationMs);
     } catch {
@@ -238,7 +239,7 @@ export function AudioControls({
     previousConfigurationKey.current = configurationKey;
     if (playbackPhaseRef.current !== "stopped") {
       resetPlayer();
-      updatePhase("stop");
+      updatePlaybackPhase("stop");
       setPlaybackMessage({
         text: "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse.",
         danger: false
@@ -311,7 +312,7 @@ export function AudioControls({
             label={note}
             onPress={() => playSingleNote(note)}
             hint={`Écouter la note ${note}`}
-            selected={pitchClassForNote(note) === soundingPitch}
+            selected={getNotePitchClass(note) === soundingPitch}
             secondary
           />)}
         </Row>

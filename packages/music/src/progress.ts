@@ -25,20 +25,20 @@ export function localDateKey(date: Date): string {
 }
 
 function previousLocalDateKey(date: Date): string {
-  const previous = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1, 12);
-  return localDateKey(previous);
+  const previousLocalDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1, 12);
+  return localDateKey(previousLocalDay);
 }
 
-function addDays(date: Date, days: number): Date {
+function addLocalCalendarDays(date: Date, dayCount: number): Date {
   const futureDate = new Date(date);
-  futureDate.setDate(futureDate.getDate() + days);
+  futureDate.setDate(futureDate.getDate() + dayCount);
   return futureDate;
 }
 
 function updateReview(previous: ReviewRecord | undefined, scaleId: TonicId, correct: boolean, now: Date): ReviewRecord {
   const stage = correct ? Math.min((previous?.stage ?? -1) + 1, REVIEW_INTERVAL_DAYS.length - 1) : -1;
   const dueAt = correct
-    ? addDays(now, REVIEW_INTERVAL_DAYS[Math.max(0, stage)] ?? 1)
+    ? addLocalCalendarDays(now, REVIEW_INTERVAL_DAYS[Math.max(0, stage)] ?? 1)
     : new Date(now.getTime() + WRONG_REVIEW_DELAY_MS);
   return { scaleId, stage, dueAt: dueAt.toISOString(), lastReviewedAt: now.toISOString() };
 }
@@ -93,8 +93,8 @@ export function isScaleMastered(state: ProgressState, scaleId: TonicId): boolean
 }
 
 function parseValidDate(value: string): Date | null {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 }
 
 export function isScaleDue(state: ProgressState, scaleId: TonicId, now: Date = new Date()): boolean {
@@ -194,8 +194,8 @@ export function normalizeProgressAttempts(input: readonly Attempt[]): AttemptNor
 
   for (let index = 0; index < input.length; index += 1) {
     const attempt = input[index];
-    const previousInput = input[index - 1];
-    if (attempt && previousInput && compareAttempts(previousInput, attempt) > 0) outOfOrder = true;
+    const previousInputAttempt = input[index - 1];
+    if (attempt && previousInputAttempt && compareAttempts(previousInputAttempt, attempt) > 0) outOfOrder = true;
     if (!attempt) continue;
     const existingAttemptWithSameId = attemptsById.get(attempt.id);
     if (existingAttemptWithSameId) {

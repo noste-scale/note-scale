@@ -44,247 +44,263 @@ import {
 } from "../src/progress-state.js";
 import { nextThemePreference, shouldApplyStoredPreference } from "../src/theme-state.js";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const audioSampleDirectory = join(here, "..", "assets", "audio");
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const audioSampleDirectory = join(scriptDirectory, "..", "assets", "audio");
 
-assert.equal(SAMPLE_KEYS.length, 24, "both complete chromatic octaves must be mapped");
-for (const name of SAMPLE_KEYS) {
-  const sampleBytes = await readFile(join(audioSampleDirectory, `${name}.wav`));
-  assert.equal(sampleBytes.subarray(0, 4).toString("ascii"), "RIFF", `${name}.wav must be a RIFF file`);
-  assert.equal(sampleBytes.subarray(8, 12).toString("ascii"), "WAVE", `${name}.wav must be a WAVE file`);
-}
-assert.equal(sampleKeyForPitch(1, 5), "Cs5");
-assert.equal(sampleKeyForPitch(12, 5), undefined);
-assert.deepEqual(
-  orderedPitchSequence([11, 1, 3], "up").map(({ sampleKey }) => sampleKey),
-  ["B4", "Cs5", "Ds5"],
-  "ascending wraps must use bundled upper-octave samples",
-);
-assert.deepEqual(
-  orderedPitchSequence([11, 1, 3], "down").map(({ sampleKey }) => sampleKey),
-  ["Ds5", "Cs5", "B4"],
-);
-assert.equal((await readFile(join(audioSampleDirectory, "C4.wav"))).equals(await readFile(join(audioSampleDirectory, "C5.wav"))), false, "upper pitches must be direct samples, not aliases");
-
-let phase = transitionPlayback("stopped", "start");
-assert.equal(phase, "playing");
-phase = transitionPlayback(phase, "pause");
-assert.equal(phase, "paused");
-phase = transitionPlayback(phase, "resume");
-assert.equal(phase, "playing");
-assert.equal(transitionPlayback(phase, "complete"), "completed");
-assert.equal(transitionPlayback("playing", "preempt"), "preempted");
-assert.equal(transitionPlayback("paused", "stop"), "stopped");
-for (const [state, expected] of [
-  ["stopped", "Lecture prête."],
-  ["playing", "Lecture en cours."],
-  ["paused", "Lecture en pause."],
-  ["completed", "Lecture terminée."],
-  ["preempted", "Lecture interrompue par une autre lecture."],
-] as const) {
-  assert.equal(playbackStatus(state), expected, `audio status must match ${state}`);
-  for (const message of ["Lecture arrêtée.", "La lecture a échoué.", "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse."]) {
-    assert.equal(playbackStatus(state, message), message, "explicit controller messages must win over phase defaults");
+async function verifyAudioSamplesAndPlaybackModel() {
+  assert.equal(SAMPLE_KEYS.length, 24, "both complete chromatic octaves must be mapped");
+  for (const name of SAMPLE_KEYS) {
+    const sampleBytes = await readFile(join(audioSampleDirectory, `${name}.wav`));
+    assert.equal(sampleBytes.subarray(0, 4).toString("ascii"), "RIFF", `${name}.wav must be a RIFF file`);
+    assert.equal(sampleBytes.subarray(8, 12).toString("ascii"), "WAVE", `${name}.wav must be a WAVE file`);
   }
-}
-assert.notEqual(playbackConfigurationKey(["Do", "Ré"], "up", false), playbackConfigurationKey(["Do", "Mi"], "up", false), "changing scale notes must reset playback");
-assert.notEqual(playbackConfigurationKey(["Do"], "up", false), playbackConfigurationKey(["Do"], "down", false), "changing direction must reset playback");
-assert.notEqual(playbackConfigurationKey(["Do"], "up", false), playbackConfigurationKey(["Do"], "up", true), "changing speed must reset playback");
-assert.notEqual(scalePlaybackLabel("Lire", "Do majeur"), scalePlaybackLabel("Lire", "Sol majeur"), "compact controls need unique scale-aware labels");
+  assert.equal(sampleKeyForPitch(1, 5), "Cs5");
+  assert.equal(sampleKeyForPitch(12, 5), undefined);
+  assert.deepEqual(
+    orderedPitchSequence([11, 1, 3], "up").map(({ sampleKey }) => sampleKey),
+    ["B4", "Cs5", "Ds5"],
+    "ascending wraps must use bundled upper-octave samples",
+  );
+  assert.deepEqual(
+    orderedPitchSequence([11, 1, 3], "down").map(({ sampleKey }) => sampleKey),
+    ["Ds5", "Cs5", "B4"],
+  );
+  assert.equal((await readFile(join(audioSampleDirectory, "C4.wav"))).equals(await readFile(join(audioSampleDirectory, "C5.wav"))), false, "upper pitches must be direct samples, not aliases");
 
-const loaded = recordAttempt(
+  let phase = transitionPlayback("stopped", "start");
+  assert.equal(phase, "playing");
+  phase = transitionPlayback(phase, "pause");
+  assert.equal(phase, "paused");
+  phase = transitionPlayback(phase, "resume");
+  assert.equal(phase, "playing");
+  assert.equal(transitionPlayback(phase, "complete"), "completed");
+  assert.equal(transitionPlayback("playing", "preempt"), "preempted");
+  assert.equal(transitionPlayback("paused", "stop"), "stopped");
+  for (const [state, expected] of [
+    ["stopped", "Lecture prête."],
+    ["playing", "Lecture en cours."],
+    ["paused", "Lecture en pause."],
+    ["completed", "Lecture terminée."],
+    ["preempted", "Lecture interrompue par une autre lecture."],
+  ] as const) {
+    assert.equal(playbackStatus(state), expected, `audio status must match ${state}`);
+    for (const message of ["Lecture arrêtée.", "La lecture a échoué.", "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse."]) {
+      assert.equal(playbackStatus(state, message), message, "explicit controller messages must win over phase defaults");
+    }
+  }
+  assert.notEqual(playbackConfigurationKey(["Do", "Ré"], "up", false), playbackConfigurationKey(["Do", "Mi"], "up", false), "changing scale notes must reset playback");
+  assert.notEqual(playbackConfigurationKey(["Do"], "up", false), playbackConfigurationKey(["Do"], "down", false), "changing direction must reset playback");
+  assert.notEqual(playbackConfigurationKey(["Do"], "up", false), playbackConfigurationKey(["Do"], "up", true), "changing speed must reset playback");
+  assert.notEqual(scalePlaybackLabel("Lire", "Do majeur"), scalePlaybackLabel("Lire", "Sol majeur"), "compact controls need unique scale-aware labels");
+}
+
+await verifyAudioSamplesAndPlaybackModel();
+
+const storedProgress = recordAttempt(
   createEmptyProgress(),
   { exerciseType: "build-scale", scaleId: "C", correct: true },
   new Date("2026-08-10T09:00:00.000Z"),
 );
-const merged = mergePendingAttempts(loaded, [{
-  input: { exerciseType: "find-error", scaleId: "G", correct: false },
-  at: new Date("2026-08-11T09:00:00.000Z"),
-}]);
-assert.equal(merged.attempts.length, 2, "pre-hydration attempts must merge with loaded attempts");
-assert.deepEqual(merged.attempts.map(({ scaleId }) => scaleId), ["C", "G"]);
-const advanced = mergePendingAttempts(loaded, [{
-  input: { exerciseType: "build-scale", scaleId: "C", correct: true },
-  at: new Date("2026-08-11T09:00:00.000Z"),
-}]);
-assert.equal(advanced.reviews.C?.stage, 1, "pending reviews must advance from the hydrated schedule");
-assert.equal(advanced.streak, 2, "pending attempts must extend the hydrated local-day streak");
-assert.equal(shouldPersistHydration(false, 1), false, "unsafe fallback loads must never be overwritten");
-assert.equal(shouldPersistHydration(true, 0), false, "hydration alone must not write an empty snapshot");
-assert.equal(shouldPersistHydration(true, 1), true);
-const validLoad: PersistenceResult = { state: loaded, warning: null, status: "valid", canSave: true };
-const hydration = resolveHydration(validLoad, [{
-  input: { exerciseType: "find-error", scaleId: "G", correct: false },
-  at: new Date("2026-08-11T09:00:00.000Z"),
-}]);
-assert.equal(hydration.shouldSave, true);
-assert.equal(decodeProgress(JSON.stringify(hydration.progress)).state.attempts.length, 2, "hydrated pending progress must survive save and reload");
-assert.equal(persistenceWarningAfterSave(null), undefined, "a successful save must clear a stale persistence warning");
+async function verifyProgressHydrationAndSerializedSaves() {
+  const merged = mergePendingAttempts(storedProgress, [{
+    input: { exerciseType: "find-error", scaleId: "G", correct: false },
+    at: new Date("2026-08-11T09:00:00.000Z"),
+  }]);
+  assert.equal(merged.attempts.length, 2, "pre-hydration attempts must merge with loaded attempts");
+  assert.deepEqual(merged.attempts.map(({ scaleId }) => scaleId), ["C", "G"]);
+  const advancedProgress = mergePendingAttempts(storedProgress, [{
+    input: { exerciseType: "build-scale", scaleId: "C", correct: true },
+    at: new Date("2026-08-11T09:00:00.000Z"),
+  }]);
+  assert.equal(advancedProgress.reviews.C?.stage, 1, "pending reviews must advance from the hydrated schedule");
+  assert.equal(advancedProgress.streak, 2, "pending attempts must extend the hydrated local-day streak");
+  assert.equal(shouldPersistHydration(false, 1), false, "unsafe fallback loads must never be overwritten");
+  assert.equal(shouldPersistHydration(true, 0), false, "hydration alone must not write an empty snapshot");
+  assert.equal(shouldPersistHydration(true, 1), true);
+  const validLoad: PersistenceResult = { state: storedProgress, warning: null, status: "valid", canSave: true };
+  const hydration = resolveHydration(validLoad, [{
+    input: { exerciseType: "find-error", scaleId: "G", correct: false },
+    at: new Date("2026-08-11T09:00:00.000Z"),
+  }]);
+  assert.equal(hydration.shouldSave, true);
+  assert.equal(decodeProgress(JSON.stringify(hydration.progress)).state.attempts.length, 2, "hydrated pending progress must survive save and reload");
+  assert.equal(persistenceWarningAfterSave(null), undefined, "a successful save must clear a stale persistence warning");
 
-let loadAttempts = 0;
-const retriedLoad = await loadProgressWithRetry(async () => {
-  loadAttempts += 1;
-  return loadAttempts === 1
-    ? { state: createEmptyProgress(), warning: "temporaire", status: "unavailable", canSave: false }
-    : validLoad;
-}, 20);
-assert.equal(retriedLoad.status, "valid");
-assert.equal(loadAttempts, 2, "a transient initial read failure must be retried once");
-const timedOutLoad = await loadProgressWithRetry(() => new Promise<PersistenceResult>(() => undefined), 5);
-assert.equal(timedOutLoad.status, "unavailable", "two hung reads must resolve to a bounded safe fallback");
+  let loadAttempts = 0;
+  const retriedLoad = await loadProgressWithRetry(async () => {
+    loadAttempts += 1;
+    return loadAttempts === 1
+      ? { state: createEmptyProgress(), warning: "temporaire", status: "unavailable", canSave: false }
+      : validLoad;
+  }, 20);
+  assert.equal(retriedLoad.status, "valid");
+  assert.equal(loadAttempts, 2, "a transient initial read failure must be retried once");
+  const timedOutLoad = await loadProgressWithRetry(() => new Promise<PersistenceResult>(() => undefined), 5);
+  assert.equal(timedOutLoad.status, "unavailable", "two hung reads must resolve to a bounded safe fallback");
 
-const writeOrder: string[] = [];
-let releaseFirst: (() => void) | undefined;
-const save = createSerializedSaver(async (snapshot: string) => {
-  writeOrder.push(`start:${snapshot}`);
-  if (snapshot === "old") await new Promise<void>((resolve) => {
-    releaseFirst = resolve;
+  const writeOrder: string[] = [];
+  let releaseFirst: (() => void) | undefined;
+  const save = createSerializedSaver(async (snapshot: string) => {
+    writeOrder.push(`start:${snapshot}`);
+    if (snapshot === "old") await new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    writeOrder.push(`end:${snapshot}`);
+    return null;
   });
-  writeOrder.push(`end:${snapshot}`);
-  return null;
-});
-const oldSave = save("old");
-const newSave = save("new");
-await Promise.resolve();
-assert.deepEqual(writeOrder, ["start:old"], "newer writes must wait for the older write");
-assert.ok(releaseFirst);
-releaseFirst();
-await Promise.all([oldSave, newSave]);
-assert.deepEqual(writeOrder, ["start:old", "end:old", "start:new", "end:new"], "the newest snapshot must finish last");
+  const oldSave = save("old");
+  const newSave = save("new");
+  await Promise.resolve();
+  assert.deepEqual(writeOrder, ["start:old"], "newer writes must wait for the older write");
+  assert.ok(releaseFirst);
+  releaseFirst();
+  await Promise.all([oldSave, newSave]);
+  assert.deepEqual(writeOrder, ["start:old", "end:old", "start:new", "end:new"], "the newest snapshot must finish last");
 
-const timedSaveCalls: string[] = [];
-const timedSave = createSerializedSaver(async (snapshot: string) => {
-  timedSaveCalls.push(snapshot);
-  if (snapshot === "hung") return new Promise<string>(() => undefined);
-  return snapshot;
-}, 5);
-const timedSaveResults = await Promise.allSettled([timedSave("hung"), timedSave("latest")]);
-assert.equal(timedSaveResults[0]?.status, "rejected");
-assert.equal(timedSaveResults[1]?.status, "fulfilled");
-assert.deepEqual(timedSaveCalls, ["hung", "latest"], "a timed-out save must release the FIFO for the latest snapshot");
+  const timedSaveCalls: string[] = [];
+  const timedSave = createSerializedSaver(async (snapshot: string) => {
+    timedSaveCalls.push(snapshot);
+    if (snapshot === "hung") return new Promise<string>(() => undefined);
+    return snapshot;
+  }, 5);
+  const timedSaveResults = await Promise.allSettled([timedSave("hung"), timedSave("latest")]);
+  assert.equal(timedSaveResults[0]?.status, "rejected");
+  assert.equal(timedSaveResults[1]?.status, "fulfilled");
+  assert.deepEqual(timedSaveCalls, ["hung", "latest"], "a timed-out save must release the FIFO for the latest snapshot");
 
-const landedWrites: string[] = [];
-let releaseStale: (() => void) | undefined;
-const repairingSave = createSerializedSaver(async (snapshot: string) => {
-  if (snapshot === "stale" && !releaseStale) await new Promise<void>((resolve) => {
-    releaseStale = resolve;
+  const landedWrites: string[] = [];
+  let releaseStale: (() => void) | undefined;
+  const repairingSave = createSerializedSaver(async (snapshot: string) => {
+    if (snapshot === "stale" && !releaseStale) await new Promise<void>((resolve) => {
+      releaseStale = resolve;
+    });
+    landedWrites.push(snapshot);
+    return null;
+  }, 5);
+  const staleWrite = repairingSave("stale").catch(() => null);
+  const newestWrite = repairingSave("newest");
+  await newestWrite;
+  assert.ok(releaseStale);
+  releaseStale();
+  await staleWrite;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(landedWrites, ["newest", "stale", "newest"], "a late stale native write must be repaired by the newest snapshot");
+}
+
+await verifyProgressHydrationAndSerializedSaves();
+
+function verifyExerciseAdaptersAndResponses() {
+  const createSequenceRandom = (values: readonly number[]) => {
+    let index = 0;
+    return () => values[index++] ?? 0.123456;
+  };
+  const exerciseTypes: readonly ExerciseType[] = ["complete-scale", "build-scale", "find-accidentals", "identify-interval", "find-error"];
+  for (const [index, expected] of exerciseTypes.entries()) {
+    const exercise = makeExercise(index, "C", createSequenceRandom([(index + 0.1) / exerciseTypes.length]));
+    assert.equal(exercise?.kind, expected, `random adapter must reach ${expected}`);
+    assert.equal(exercise?.sourceScaleId, "C", "a scale route must stay scoped on every exercise");
+  }
+  const catalogIds = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
+  for (const [index, expected] of catalogIds.entries()) {
+    const exercise = makeExercise(index, undefined, createSequenceRandom([(index + 0.1) / catalogIds.length, 0.01]));
+    assert.equal(exercise?.sourceScaleId, expected, `random adapter must reach scale ${expected}`);
+  }
+
+  const focusDate = new Date("2026-08-11T12:00:00.000Z");
+  const errorProne = recordAttempt(
+    createEmptyProgress(),
+    { exerciseType: "find-error", scaleId: "E", correct: false },
+    new Date("2026-08-10T09:00:00.000Z"),
+    () => 0.25,
+  );
+  for (let generation = 0; generation < 5; generation += 1) {
+    assert.equal(selectExerciseScale(generation, undefined, errorProne, () => 0.5, focusDate)?.id, "E", "due error-prone scales must receive deterministic extra weight");
+  }
+  assert.equal(selectExerciseScale(0, "Cb", errorProne, () => 0, focusDate)?.id, "Cb", "an explicit scale route must always remain fixed");
+
+  const buildExercise = makeExercise(0, "C", createSequenceRandom([0.21]));
+  assert.ok(buildExercise);
+  assert.equal(buildExercise.selectionMode, "ordered");
+  const orderedLabels = buildExercise.domainExercise.correctAnswer.map((answer) => {
+    const entry = Object.entries(buildExercise.optionPayloads).find(([, payload]) => payload[0] === answer);
+    assert.ok(entry, `missing mobile option for ${answer}`);
+    return entry[0];
   });
-  landedWrites.push(snapshot);
-  return null;
-}, 5);
-const staleWrite = repairingSave("stale").catch(() => null);
-const newestWrite = repairingSave("newest");
-await newestWrite;
-assert.ok(releaseStale);
-releaseStale();
-await staleWrite;
-await new Promise((resolve) => setTimeout(resolve, 10));
-assert.deepEqual(landedWrites, ["newest", "stale", "newest"], "a late stale native write must be repaired by the newest snapshot");
+  assert.deepEqual(selectionPayload(orderedLabels, buildExercise.optionPayloads), buildExercise.domainExercise.correctAnswer);
+  const correctGrade = gradeSelection(buildExercise, orderedLabels);
+  assert.equal(correctGrade.correct, true, "ordered mobile payload must grade correctly");
+  const wrongLabels = [...orderedLabels];
+  [wrongLabels[1], wrongLabels[2]] = [wrongLabels[2] as string, wrongLabels[1] as string];
+  const wrongGrade = gradeSelection(buildExercise, wrongLabels);
+  assert.equal(wrongGrade.correct, false);
+  assert.deepEqual(wrongGrade.errors.map(({ index }) => index), [1, 2], "mobile grading must preserve positional feedback");
 
-const createSequenceRandom = (values: readonly number[]) => {
-  let index = 0;
-  return () => values[index++] ?? 0.123456;
-};
-const exerciseTypes: readonly ExerciseType[] = ["complete-scale", "build-scale", "find-accidentals", "identify-interval", "find-error"];
-for (const [index, expected] of exerciseTypes.entries()) {
-  const exercise = makeExercise(index, "C", createSequenceRandom([(index + 0.1) / exerciseTypes.length]));
-  assert.equal(exercise?.kind, expected, `random adapter must reach ${expected}`);
-  assert.equal(exercise?.sourceScaleId, "C", "a scale route must stay scoped on every exercise");
+  const eAccidentals = makeExercise(0, "E", createSequenceRandom([0.41]));
+  assert.equal(eAccidentals?.kind, "find-accidentals");
+  assert.ok(eAccidentals);
+  const eLabels = eAccidentals.domainExercise.correctAnswer.map((answer) => {
+    const entry = Object.entries(eAccidentals.optionPayloads).find(([, payload]) => payload[0] === answer);
+    assert.ok(entry, `missing E-major accidental option for ${answer}`);
+    return entry[0];
+  });
+  const selectedELabels = eLabels.reduce<readonly string[]>(
+    (current, label) => updateSelection("multiple", current, label, eAccidentals.maximumSelections, eAccidentals.noneOption),
+    [],
+  );
+  assert.deepEqual(new Set(selectedELabels), new Set(eLabels), "all four E-major accidentals must remain selectable together");
+  assert.equal(gradeSelection(eAccidentals, selectedELabels).correct, true);
+
+  const cAccidentals = makeExercise(0, "C", createSequenceRandom([0.41]));
+  assert.equal(cAccidentals?.kind, "find-accidentals");
+  assert.ok(cAccidentals?.options.includes("Aucune"), "C-major accidental choices must expose Aucune");
+  assert.equal(gradeSelection(cAccidentals, ["Aucune"]).correct, true);
+
+  const eScale = getScale("E");
+  assert.ok(eScale);
+  assert.deepEqual(
+    eScale.construction[0],
+    {
+      currentNote: "Mi",
+      interval: "ton",
+      intervalLabel: "un ton",
+      naturalCandidate: "Fa",
+      necessaryAlteration: "dièse",
+      nextNote: "Fa♯",
+      result: "Fa♯",
+      explanation: "Depuis Mi, applique ton. La lettre suivante est Fa. Fa devient Fa♯ pour respecter la formule.",
+    },
+    "generator view model must expose every labeled construction value",
+  );
+
+  assert.equal(routeValue(["C", "G"]), "C");
+  assert.equal(routeValue("Db"), "Db");
+  const answered = { exerciseId: "old", selected: ["Do"], grade: correctGrade };
+  assert.equal(responseForExercise(answered, "old"), answered);
+  assert.deepEqual(responseForExercise(answered, "new"), { exerciseId: "new", selected: [] }, "route/exercise changes must reset feedback");
+  assert.deepEqual(updateSelection("ordered", ["Do"], "Ré", 2), ["Do", "Ré"]);
+  assert.deepEqual(updateSelection("ordered", ["Do", "Ré"], "Mi", 2), ["Do", "Ré"]);
+  assert.deepEqual(updateSelection("multiple", ["Fa♯"], "Aucune", 4, "Aucune"), ["Aucune"]);
+  assert.equal(shouldRecordAttempt(undefined, "exercise-1", true), true);
+  assert.equal(shouldRecordAttempt("exercise-1", "exercise-1", true), false, "one graded exercise must create one progress record");
+  const firstRecording = attemptRecordingDecision(undefined, "exercise-1", true);
+  const duplicateRecording = attemptRecordingDecision(firstRecording.lastRecordedExerciseId, "exercise-1", true);
+  assert.equal(firstRecording.record, true);
+  assert.equal(duplicateRecording.record, false, "controller decision must record a graded exercise exactly once");
+
 }
-const catalogIds = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
-for (const [index, expected] of catalogIds.entries()) {
-  const exercise = makeExercise(index, undefined, createSequenceRandom([(index + 0.1) / catalogIds.length, 0.01]));
-  assert.equal(exercise?.sourceScaleId, expected, `random adapter must reach scale ${expected}`);
+
+function verifyThemePreferences() {
+  assert.equal(shouldApplyStoredPreference(0, 0), true);
+  assert.equal(shouldApplyStoredPreference(0, 1), false, "late theme hydration must not replace an explicit choice");
+  assert.deepEqual([nextThemePreference("system"), nextThemePreference("light"), nextThemePreference("dark")], ["light", "dark", "system"]);
 }
 
-const focusDate = new Date("2026-08-11T12:00:00.000Z");
-const errorProne = recordAttempt(
-  createEmptyProgress(),
-  { exerciseType: "find-error", scaleId: "E", correct: false },
-  new Date("2026-08-10T09:00:00.000Z"),
-  () => 0.25,
-);
-for (let generation = 0; generation < 5; generation += 1) {
-  assert.equal(selectExerciseScale(generation, undefined, errorProne, () => 0.5, focusDate)?.id, "E", "due error-prone scales must receive deterministic extra weight");
-}
-assert.equal(selectExerciseScale(0, "Cb", errorProne, () => 0, focusDate)?.id, "Cb", "an explicit scale route must always remain fixed");
-
-const build = makeExercise(0, "C", createSequenceRandom([0.21]));
-assert.ok(build);
-assert.equal(build.selectionMode, "ordered");
-const orderedLabels = build.domainExercise.correctAnswer.map((answer) => {
-  const entry = Object.entries(build.optionPayloads).find(([, payload]) => payload[0] === answer);
-  assert.ok(entry, `missing mobile option for ${answer}`);
-  return entry[0];
-});
-assert.deepEqual(selectionPayload(orderedLabels, build.optionPayloads), build.domainExercise.correctAnswer);
-const correctGrade = gradeSelection(build, orderedLabels);
-assert.equal(correctGrade.correct, true, "ordered mobile payload must grade correctly");
-const wrongLabels = [...orderedLabels];
-[wrongLabels[1], wrongLabels[2]] = [wrongLabels[2] as string, wrongLabels[1] as string];
-const wrongGrade = gradeSelection(build, wrongLabels);
-assert.equal(wrongGrade.correct, false);
-assert.deepEqual(wrongGrade.errors.map(({ index }) => index), [1, 2], "mobile grading must preserve positional feedback");
-
-const eAccidentals = makeExercise(0, "E", createSequenceRandom([0.41]));
-assert.equal(eAccidentals?.kind, "find-accidentals");
-assert.ok(eAccidentals);
-const eLabels = eAccidentals.domainExercise.correctAnswer.map((answer) => {
-  const entry = Object.entries(eAccidentals.optionPayloads).find(([, payload]) => payload[0] === answer);
-  assert.ok(entry, `missing E-major accidental option for ${answer}`);
-  return entry[0];
-});
-const selectedELabels = eLabels.reduce<readonly string[]>(
-  (current, label) => updateSelection("multiple", current, label, eAccidentals.maximumSelections, eAccidentals.noneOption),
-  [],
-);
-assert.deepEqual(new Set(selectedELabels), new Set(eLabels), "all four E-major accidentals must remain selectable together");
-assert.equal(gradeSelection(eAccidentals, selectedELabels).correct, true);
-
-const cAccidentals = makeExercise(0, "C", createSequenceRandom([0.41]));
-assert.equal(cAccidentals?.kind, "find-accidentals");
-assert.ok(cAccidentals?.options.includes("Aucune"), "C-major accidental choices must expose Aucune");
-assert.equal(gradeSelection(cAccidentals, ["Aucune"]).correct, true);
-
-const eScale = getScale("E");
-assert.ok(eScale);
-assert.deepEqual(
-  eScale.construction[0],
-  {
-    currentNote: "Mi",
-    interval: "ton",
-    intervalLabel: "un ton",
-    naturalCandidate: "Fa",
-    necessaryAlteration: "dièse",
-    nextNote: "Fa♯",
-    result: "Fa♯",
-    explanation: "Depuis Mi, applique ton. La lettre suivante est Fa. Fa devient Fa♯ pour respecter la formule.",
-  },
-  "generator view model must expose every labeled construction value",
-);
-
-assert.equal(routeValue(["C", "G"]), "C");
-assert.equal(routeValue("Db"), "Db");
-const answered = { exerciseId: "old", selected: ["Do"], grade: correctGrade };
-assert.equal(responseForExercise(answered, "old"), answered);
-assert.deepEqual(responseForExercise(answered, "new"), { exerciseId: "new", selected: [] }, "route/exercise changes must reset feedback");
-assert.deepEqual(updateSelection("ordered", ["Do"], "Ré", 2), ["Do", "Ré"]);
-assert.deepEqual(updateSelection("ordered", ["Do", "Ré"], "Mi", 2), ["Do", "Ré"]);
-assert.deepEqual(updateSelection("multiple", ["Fa♯"], "Aucune", 4, "Aucune"), ["Aucune"]);
-assert.equal(shouldRecordAttempt(undefined, "exercise-1", true), true);
-assert.equal(shouldRecordAttempt("exercise-1", "exercise-1", true), false, "one graded exercise must create one progress record");
-const firstRecording = attemptRecordingDecision(undefined, "exercise-1", true);
-const duplicateRecording = attemptRecordingDecision(firstRecording.lastRecordedExerciseId, "exercise-1", true);
-assert.equal(firstRecording.record, true);
-assert.equal(duplicateRecording.record, false, "controller decision must record a graded exercise exactly once");
-
-assert.equal(shouldApplyStoredPreference(0, 0), true);
-assert.equal(shouldApplyStoredPreference(0, 1), false, "late theme hydration must not replace an explicit choice");
-assert.deepEqual([nextThemePreference("system"), nextThemePreference("light"), nextThemePreference("dark")], ["light", "dark", "system"]);
+verifyExerciseAdaptersAndResponses();
+verifyThemePreferences();
 
 // ponytail: execute real TSX with host stubs for prop/element checks; device tests still own native layout and accessibility.
 async function loadComponentModule(path: string, mocks: Record<string, unknown>, globals: Record<string, unknown> = {}) {
-  const filename = resolve(here, path);
+  const filename = resolve(scriptDirectory, path);
   const require = createRequire(filename);
   const source = ts.transpileModule(await readFile(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
@@ -323,23 +339,32 @@ const themes = await loadComponentModule("../src/theme.tsx", {
 });
 let currentTheme = themes.light;
 let fontScaleForScreen = 1;
+const piano = await loadComponentModule("../src/piano.tsx", {
+  react: { useRef: (initial: unknown) => ({ current: initial }) },
+  "react-native": {
+    Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", View: "View",
+    StyleSheet: nativeStyleSheet,
+    useWindowDimensions: () => ({ fontScale: fontScaleForScreen }),
+  },
+  "@notescale/music": music,
+  "./theme": { useTheme: () => currentTheme },
+});
 const components = await loadComponentModule("../src/components.tsx", {
-  react: { ...createRequire(import.meta.url)("react"), useRef: (initial: unknown) => ({ current: initial }) },
   "react-native": {
     Pressable: "Pressable",
     TouchableOpacity: "TouchableOpacity",
     ScrollView: "ScrollView",
     Text: "Text",
     View: "View",
-    StyleSheet: nativeStyleSheet,
-    useWindowDimensions: () => ({ fontScale: fontScaleForScreen })
+    StyleSheet: nativeStyleSheet
   },
+  "./piano": piano,
   "react-native-safe-area-context": { SafeAreaView: "SafeAreaView" },
   "expo-router": { Link: "Link" },
-  "@notescale/music": music,
   "./theme": { useTheme: () => currentTheme },
 });
-const mobileRequire = createRequire(join(here, "../package.json"));
+assert.equal(components.Piano, piano.Piano, "component exports must retain the extracted piano");
+const mobileRequire = createRequire(join(scriptDirectory, "../package.json"));
 const composeRefs = mobileRequire("@radix-ui/react-compose-refs");
 const radixSlot = await loadComponentModule(mobileRequire.resolve("@radix-ui/react-slot"), {
   "@radix-ui/react-compose-refs": { ...composeRefs, useComposedRefs: composeRefs.composeRefs },
@@ -466,6 +491,7 @@ for (const compact of [false, true]) {
     "@notescale/music": music,
     "./audio-model": audioModel,
     "./components": components,
+    "./piano": piano,
     "react-native": { View: "View" },
     react: {
       useState,
@@ -564,6 +590,7 @@ for (const compact of [false, true]) for (const playing of [false, true]) {
     "@notescale/music": music,
     "./audio-model": audioModel,
     "./components": components,
+    "./piano": piano,
     "react-native": { View: "View" },
     react: reactHooks,
     "expo-audio": {
@@ -640,7 +667,7 @@ async function mountLessonProgress(storageMock: {
 for (const storedLesson of ["tones", "obsolete-lesson", null]) {
   const writes: string[] = [];
   const provider = await mountLessonProgress({
-    getItem: async (key) => key === "notescale.lesson.v1" ? storedLesson : JSON.stringify(loaded),
+    getItem: async (key) => key === "notescale.lesson.v1" ? storedLesson : JSON.stringify(storedProgress),
     setItem: async (key) => {
       writes.push(key);
     },
@@ -649,7 +676,7 @@ for (const storedLesson of ["tones", "obsolete-lesson", null]) {
   await waitForLessonStorageTick();
   assert.equal(provider.value().lessonHydrated, true);
   assert.equal(provider.value().lastLessonId, storedLesson === "tones" ? "tones" : undefined, "only real lesson IDs can become a resume destination");
-  assert.deepEqual(provider.value().progress.attempts, loaded.attempts, "bookmark hydration must retain exercise history");
+  assert.deepEqual(provider.value().progress.attempts, storedProgress.attempts, "bookmark hydration must retain exercise history");
   assert.equal(writes.length, 0, "reading a bookmark must not mark a lesson read or rewrite progress");
   provider.unmount();
 }
@@ -658,7 +685,7 @@ const pendingStoredLesson = new Promise<string>((resolve) => {
   resolveStoredLesson = resolve;
 });
 const lessonWrites: [string, string][] = [];
-const lessonStore = new Map<string, string>([["notescale.progress.v1", JSON.stringify(loaded)]]);
+const lessonStore = new Map<string, string>([["notescale.progress.v1", JSON.stringify(storedProgress)]]);
 const setLessonItem = async (key: string, value: string) => {
   lessonWrites.push([key, value]);
   lessonStore.set(key, value);
@@ -674,7 +701,7 @@ resolveStoredLesson("tones");
 await waitForLessonStorageTick();
 assert.equal(providerWithPendingLesson.value().lastLessonId, "d-major", "a late stored bookmark must not replace the latest focused lesson");
 assert.deepEqual(lessonWrites, [["notescale.lesson.v1", "formula"], ["notescale.lesson.v1", "d-major"]], "lesson changes must serialize into their own key only");
-assert.deepEqual(providerWithPendingLesson.value().progress.attempts, loaded.attempts);
+assert.deepEqual(providerWithPendingLesson.value().progress.attempts, storedProgress.attempts);
 providerWithPendingLesson.unmount();
 const reloadedLessonProvider = await mountLessonProgress({ getItem: async (key) => lessonStore.get(key) ?? null, setItem: setLessonItem });
 await waitForLessonStorageTick();
@@ -684,7 +711,7 @@ let lessonWriteFails = true;
 const providerWithFailedLessonStorage = await mountLessonProgress({
   getItem: async (key) => {
     if (key === "notescale.lesson.v1") throw new Error("read failed");
-    return JSON.stringify(loaded);
+    return JSON.stringify(storedProgress);
   },
   setItem: async () => {
     if (lessonWriteFails) throw new Error("write failed");
@@ -772,10 +799,13 @@ for (const nativeHeader of [false, true]) {
 for (const scale of [1, 1.3, 2]) {
   fontScaleForScreen = scale;
   const played: string[] = [];
-  const tree = collectElements(components.Piano!({
+  const tree = collectElements(piano.Piano!({
     activeNotes: ['Sol', 'La', 'Si', 'Do', 'Ré', 'Mi', 'Fa♯'],
     onPlayNote: (note: string) => played.push(note)
   }));
+  const caption = tree.find((node) => node?.type === 'Text' && node.props.children === 'En jaune : notes de la gamme. Fais glisser le clavier.');
+  assert.equal(caption.props.accessibilityLiveRegion, 'none', 'piano caption must retain Body accessibility props');
+  assert.deepEqual(flattenStyle(caption.props.style), { fontSize: 16, lineHeight: 24, color: currentTheme.muted }, 'piano caption must retain Body typography and muted color');
   const keys = tree.filter((node) => node?.type === 'Pressable');
   assert.equal(keys.length, 12);
   const styles = keys.map((key) => flattenStyle(key.props.style({ pressed: false })));
@@ -869,7 +899,7 @@ for (const [path, prefix, expectedPlayers] of [['../app/scales.tsx', '../src', 1
   assert.equal(collectElements(screen.default()).filter((node) => node?.type === 'AudioControls').length, 0);
 }
 currentTheme = themes.dark;
-const darkPiano = collectElements(components.Piano!({ activeNotes: [], onPlayNote: () => undefined })).filter((node) => node?.type === 'Pressable');
+const darkPiano = collectElements(piano.Piano!({ activeNotes: [], onPlayNote: () => undefined })).filter((node) => node?.type === 'Pressable');
 assert.equal(flattenStyle(darkPiano[0].props.style({ pressed: false })).backgroundColor, '#FFFFFF', 'white keys must stay distinguishable from black keys in dark mode');
 currentTheme = themes.light;
 

@@ -7,9 +7,9 @@ import { useProgress } from "../../src/progress";
 
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const focused = useIsFocused();
+  const isScreenFocused = useIsFocused();
   const { rememberLesson, lessonWarning } = useProgress();
-  const lessonIndex = LESSONS.findIndex((item) => item.id === id);
+  const lessonIndex = LESSONS.findIndex((lessonOption) => lessonOption.id === id);
   const lesson = LESSONS[lessonIndex];
   const nextLesson = LESSONS[lessonIndex + 1];
   useFocusEffect(useCallback(() => {
@@ -37,7 +37,7 @@ export default function LessonScreen() {
         <Heading>Les mêmes notes, deux notations</Heading>
         <Body>{lesson.notes.join("\n")}</Body>
       </Card> : null}
-      {lesson.id === "tones" && focused ? <AudioControls notes={["Do", "Ré", "Mi", "Fa", "Sol", "La", "Si", "Do"]} piano /> : null}
+      {lesson.id === "tones" && isScreenFocused ? <AudioControls notes={["Do", "Ré", "Mi", "Fa", "Sol", "La", "Si", "Do"]} piano /> : null}
       <Card>
         <Heading>À retenir</Heading>
         <Body>{lesson.id === "tones" ? "Mi–Fa et Si–Do sont collés." : "Chaque gamme utilise les sept noms de note dans l’ordre."}</Body>

@@ -13,7 +13,7 @@ import {
 } from "../../src/exercise-state";
 import { useProgress } from "../../src/progress";
 
-const kindLabels: Record<ExerciseView["kind"], string> = {
+const exerciseTypeLabels: Record<ExerciseView["kind"], string> = {
   "complete-scale": "Compléter une gamme",
   "build-scale": "Construire une gamme",
   "find-accidentals": "Identifier les altérations",
@@ -39,7 +39,7 @@ export default function ExercisesScreen() {
     [isDailySession, dailyExercises, hydrated, exerciseIndex, scopedScaleId],
   );
   const currentResponse = responseForExercise(response, exercise?.id ?? "");
-  const selected = currentResponse.selected;
+  const selectedAnswerLabels = currentResponse.selected;
   const grade = currentResponse.grade;
   const isSubmitted = grade?.graded === true;
 
@@ -50,8 +50,8 @@ export default function ExercisesScreen() {
 
   const selectAnswer = (option: string) => {
     if (!exercise || isSubmitted) return;
-    setResponse((current) => {
-      const activeResponse = responseForExercise(current, exercise.id);
+    setResponse((previousResponse) => {
+      const activeResponse = responseForExercise(previousResponse, exercise.id);
       return {
         exerciseId: exercise.id,
         selected: updateSelection(
@@ -66,13 +66,13 @@ export default function ExercisesScreen() {
   };
 
   const submitAnswer = () => {
-    if (!hydrated || !exercise || selected.length === 0) return;
-    const result = gradeSelection(exercise, selected);
-    setResponse({ exerciseId: exercise.id, selected, grade: result });
-    const recording = attemptRecordingDecision(lastRecordedExerciseId.current, exercise.id, result.graded);
+    if (!hydrated || !exercise || selectedAnswerLabels.length === 0) return;
+    const gradeResult = gradeSelection(exercise, selectedAnswerLabels);
+    setResponse({ exerciseId: exercise.id, selected: selectedAnswerLabels, grade: gradeResult });
+    const recording = attemptRecordingDecision(lastRecordedExerciseId.current, exercise.id, gradeResult.graded);
     lastRecordedExerciseId.current = recording.lastRecordedExerciseId;
     if (recording.record) {
-      recordAttempt(exercise.scaleId, result.correct, exercise.kind);
+      recordAttempt(exercise.scaleId, gradeResult.correct, exercise.kind);
     }
   };
 
@@ -81,7 +81,7 @@ export default function ExercisesScreen() {
       setDailySession(false);
       setExerciseIndex(0);
     } else {
-      setExerciseIndex((value) => value + 1);
+      setExerciseIndex((previousIndex) => previousIndex + 1);
     }
     setResponse(createEmptyResponse());
     lastRecordedExerciseId.current = undefined;
@@ -110,14 +110,14 @@ export default function ExercisesScreen() {
 
   let validationHint = "Affiche ensuite la correction";
   if (!hydrated) validationHint = "Attends le chargement de ta progression";
-  else if (selected.length === 0) validationHint = "Choisis d’abord une réponse";
+  else if (selectedAnswerLabels.length === 0) validationHint = "Choisis d’abord une réponse";
 
   let answerFeedback = "";
   let correctionFeedback = "";
   if (exercise && isSubmitted && grade) {
     answerFeedback = grade.correct
       ? "Bonne réponse. "
-      : `À corriger : tu as choisi « ${selected.join(" – ")} ». La réponse attendue est « ${displayGradeAnswer(grade.correctAnswer, exercise.kind)} ». `;
+      : `À corriger : tu as choisi « ${selectedAnswerLabels.join(" – ")} ». La réponse attendue est « ${displayGradeAnswer(grade.correctAnswer, exercise.kind)} ». `;
     const errorMessages = grade.errors.map((error) => error.message).join(" ");
     const errorSeparator = grade.errors.length ? " " : "";
     correctionFeedback = `${errorMessages}${errorSeparator}${grade.explanation}\nRègle à retenir : ${grade.rule}`;
@@ -137,7 +137,7 @@ export default function ExercisesScreen() {
       </Card> : null}
       {exercise ? (
         <Card>
-          <Body muted>Type : {kindLabels[exercise.kind]}</Body>
+          <Body muted>Type : {exerciseTypeLabels[exercise.kind]}</Body>
           <Heading>{exercise.question}</Heading>
           <View
             accessibilityLabel="Choix de réponse"
@@ -149,19 +149,19 @@ export default function ExercisesScreen() {
                   key={option}
                   label={option}
                   role={chipRole}
-                  selected={exercise.selectionMode !== "ordered" && selected.includes(option)}
+                  selected={exercise.selectionMode !== "ordered" && selectedAnswerLabels.includes(option)}
                   disabled={isSubmitted}
                   onPress={() => selectAnswer(option)}
                 />
               ))}
             </Row>
           </View>
-          {selected.length ? <Body live>{answerLabel} : {selected.join(" – ")}</Body> : <Body muted>{exercise.selectionMode === "ordered" ? "Choisis les notes une à une, dans l’ordre." : "Aucun choix pour le moment."}</Body>}
-          {!isSubmitted && selected.length ? (
+          {selectedAnswerLabels.length ? <Body live>{answerLabel} : {selectedAnswerLabels.join(" – ")}</Body> : <Body muted>{exercise.selectionMode === "ordered" ? "Choisis les notes une à une, dans l’ordre." : "Aucun choix pour le moment."}</Body>}
+          {!isSubmitted && selectedAnswerLabels.length ? (
             <Row>
               {exercise.selectionMode === "ordered" ? <Action
                 label="Annuler la dernière note"
-                onPress={() => setResponse({ exerciseId: exercise.id, selected: selected.slice(0, -1) })}
+                onPress={() => setResponse({ exerciseId: exercise.id, selected: selectedAnswerLabels.slice(0, -1) })}
               /> : null}
               <Action label="Effacer ma réponse" onPress={() => setResponse(createEmptyResponse(exercise.id))} />
             </Row>
@@ -169,7 +169,7 @@ export default function ExercisesScreen() {
           {!isSubmitted ? <Action
             label="Valider ma réponse"
             onPress={submitAnswer}
-            disabled={!hydrated || selected.length === 0}
+            disabled={!hydrated || selectedAnswerLabels.length === 0}
             hint={validationHint}
           /> : null}
           {grade && !grade.graded ? <Notice danger>{grade.validationMessage ?? "Propose une réponse avant de valider."}</Notice> : null}
