@@ -9,16 +9,22 @@ const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 function processExists(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+
     throw error;
   }
 }
 
 function terminateFixtureTree(leaderPid: number, fixtureProcessIds: number[]): void {
   if (process.platform === "win32" && processExists(leaderPid)) {
-    spawnSync("taskkill", ["/PID", String(leaderPid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    spawnSync(
+      "taskkill",
+      ["/PID", String(leaderPid), "/T", "/F"],
+      { stdio: "ignore", windowsHide: true }
+    );
   } else if (process.platform !== "win32") {
     try {
       process.kill(-leaderPid, "SIGKILL");
@@ -33,11 +39,15 @@ function terminateFixtureTree(leaderPid: number, fixtureProcessIds: number[]): v
 
 test("timeout reports diagnostics, exits non-zero, and terminates Expo", () => {
   const verificationStartedAt = performance.now();
-  const verificationRun = spawnSync(process.execPath, [
-    "--experimental-strip-types",
-    join(projectRoot, "scripts", "verify-mobile-start.ts"),
-    "--test-timeout-fixture",
-  ], { encoding: "utf8", timeout: 10_000 });
+  const verificationRun = spawnSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      join(projectRoot, "scripts", "verify-mobile-start.ts"),
+      "--test-timeout-fixture",
+    ],
+    { encoding: "utf8", timeout: 10_000 }
+  );
   const elapsedMs = performance.now() - verificationStartedAt;
   const leaderPid = Number(/fixture leader pid=(\d+)/.exec(verificationRun.stdout)?.[1]);
   const fixtureMatch = /fixture pid=(\d+) descendant=(\d+)/.exec(verificationRun.stderr);
@@ -53,6 +63,7 @@ test("timeout reports diagnostics, exits non-zero, and terminates Expo", () => {
     assert.match(verificationRun.stderr, /--- Expo stderr ---\s+fixture stderr/);
     assert.ok(Number.isInteger(leaderPid));
     assert.equal(fixtureProcessIds.length, 2);
+
     for (const pid of fixtureProcessIds) {
       assert.equal(processExists(pid), false, `fixture process ${pid} must not survive verification`);
     }
@@ -72,11 +83,16 @@ test("healthy Metro keeps a full response budget near the stability deadline", (
       return fetch(url, options);
     };
   `;
-  const verificationRun = spawnSync(process.execPath, [
-    "--experimental-strip-types",
-    "--import", `data:text/javascript,${encodeURIComponent(delayedFetchPreload)}`,
-    join(projectRoot, "scripts", "verify-mobile-start.ts"),
-  ], { encoding: "utf8", timeout: 45_000 });
+  const verificationRun = spawnSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "--import", `data:text/javascript,${encodeURIComponent(delayedFetchPreload)}`,
+      join(projectRoot, "scripts", "verify-mobile-start.ts"),
+    ],
+    { encoding: "utf8", timeout: 45_000 }
+  );
+
   assert.ifError(verificationRun.error);
   assert.equal(verificationRun.status, 0, verificationRun.stderr);
   assert.match(verificationRun.stdout, /Verified Expo\/Metro startup, typed routes/);

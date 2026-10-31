@@ -10,14 +10,18 @@ const eslint = new ESLint({ cwd: projectRoot });
 
 test("core compilation excludes Node ambient types and all DOM/worker library variants", () => {
   const config = ts.readConfigFile(resolve(projectRoot, "packages/music/tsconfig.json"), ts.sys.readFile);
+
   assert.equal(config.error, undefined);
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, resolve(projectRoot, "packages/music"));
+
   assert.deepEqual(parsed.errors, []);
   const program = ts.createProgram(parsed.fileNames, parsed.options);
   const platformFiles = program.getSourceFiles().filter((file) => {
     const filename = file.fileName.replaceAll("\\", "/");
+
     return /\/lib\.(?:dom|webworker)[^/]*\.d\.ts$/i.test(filename) || /\/@types\/node\//i.test(filename);
   });
+
   assert.deepEqual(parsed.options.types, []);
   assert.deepEqual(platformFiles.map((file) => file.fileName), []);
 });
@@ -31,6 +35,7 @@ test("architecture accepts inward core/package/app imports", async () => {
     ...(process.platform === "win32" ? [["packages/music/src/training.ts", 'import "../Src/notes";']] : []),
   ]) {
     const [result] = await eslint.lintText(source!, { filePath: resolve(projectRoot, file!) });
+
     assert.equal(result?.errorCount, 0, JSON.stringify(result?.messages));
   }
 });
@@ -61,6 +66,7 @@ test("architecture rejects framework, platform, cross-app and package-internal d
     ] : []),
   ]) {
     const [result] = await eslint.lintText(source!, { filePath: resolve(projectRoot, file!) });
+
     assert.ok(result?.messages.some((message) => message.ruleId === "architecture/import-boundaries" && message.message.includes("Architecture boundary")), `${file}: ${source}`);
   }
 });
@@ -77,6 +83,7 @@ test("core rejects browser globals and only mobile composition imports concrete 
     ["apps/web/src/adapter.ts", 'import "@react-native-async-storage/async-storage";', "architecture/import-boundaries"],
   ]) {
     const [result] = await eslint.lintText(source!, { filePath: resolve(projectRoot, file!) });
+
     assert.ok(result?.messages.some((message) => message.ruleId === rule), `${file}: ${source}`);
   }
 });
@@ -86,6 +93,7 @@ test("import and global guards cover every executable JavaScript/TypeScript exte
     const [result] = await eslint.lintText('import "react"; globalThis.fetch("https://example.test");', {
       filePath: resolve(projectRoot, `packages/music/src/probe.${extension}`),
     });
+
     assert.ok(result?.messages.some((message) => message.ruleId === "architecture/import-boundaries"), extension);
     assert.ok(result?.messages.some((message) => message.ruleId === "no-restricted-globals"), extension);
   }

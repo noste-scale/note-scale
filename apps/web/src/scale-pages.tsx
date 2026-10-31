@@ -8,11 +8,16 @@ import { AudioPlayer, describeKeySignature, NoteRow, Piano } from "./music-compo
 export function ScaleList() {
   const [searchQuery, setSearchQuery] = useState("");
   const matchingScales = filterScales(searchQuery);
+
   return (
     <Page title="Toutes les gammes" intro="15 écritures conventionnelles, de Do majeur à Do♭ majeur.">
       <label className="search">
         Rechercher une gamme
-        <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} type="search" />
+        <input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          type="search"
+        />
       </label>
       {!scales.length ? (
         <EmptyDomain />
@@ -27,8 +32,16 @@ export function ScaleList() {
             <NoteRow notes={scale.notes} />
             <p>{describeKeySignature(scale)}</p>
             <div className="inline">
-              <AudioPlayer notes={scale.notes} label={scale.frenchName} compact />
-              <Link className="button" to={`/gammes/${encodeURIComponent(scale.id)}`} aria-label={`Détails de ${scale.frenchName}`}>Détails</Link>
+              <AudioPlayer
+                notes={scale.notes}
+                label={scale.frenchName}
+                compact
+              />
+              <Link
+                className="button"
+                to={`/gammes/${encodeURIComponent(scale.id)}`}
+                aria-label={`Détails de ${scale.frenchName}`}
+              >Détails</Link>
             </div>
           </article>
         ))}
@@ -41,7 +54,9 @@ export function ScaleDetail() {
   const { id: routeScaleId = "" } = useParams();
   const decodedScaleId = safeRouteScaleId(routeScaleId);
   const scale = decodedScaleId ? getScale(decodedScaleId) : undefined;
+
   if (!scale) return <NotFound />;
+
   return (
     <Page title={scale.frenchName} intro={`${scale.internationalName} · ${describeKeySignature(scale)}`}>
       <NoteRow notes={scale.notes} />
@@ -72,6 +87,7 @@ export function Generator() {
   const [completedIntervalCount, setCompletedIntervalCount] = useState(0);
   const scale = getScale(selectedScaleId);
   const construction = constructionDetails(selectedScaleId, completedIntervalCount);
+
   return (
     <Page title="Générateur" intro="Choisis une tonique, puis avance intervalle par intervalle.">
       <label>
@@ -90,10 +106,22 @@ export function Generator() {
             {construction ? (
               <>
                 <dl className="construction-data">
-                  <div><dt>Note actuelle</dt><dd>{construction.currentNote}</dd></div>
-                  <div><dt>Intervalle</dt><dd>{construction.interval}</dd></div>
-                  <div><dt>Lettre naturelle attendue</dt><dd>{construction.expectedNatural}</dd></div>
-                  <div><dt>Altération requise</dt><dd>{construction.requiredAccidental}</dd></div>
+                  <div>
+                    <dt>Note actuelle</dt>
+                    <dd>{construction.currentNote}</dd>
+                  </div>
+                  <div>
+                    <dt>Intervalle</dt>
+                    <dd>{construction.interval}</dd>
+                  </div>
+                  <div>
+                    <dt>Lettre naturelle attendue</dt>
+                    <dd>{construction.expectedNatural}</dd>
+                  </div>
+                  <div>
+                    <dt>Altération requise</dt>
+                    <dd>{construction.requiredAccidental}</dd>
+                  </div>
                 </dl>
                 <p>Note obtenue : <b>{construction.nextNote}</b>.</p>
                 <p>{construction.explanation}</p>
@@ -101,12 +129,21 @@ export function Generator() {
             ) : <p>Commence sur la tonique {scale.notes[0]?.label}.</p>}
           </div>
           <div className="inline">
-            <button onClick={() => setCompletedIntervalCount(Math.max(0, completedIntervalCount - 1))} disabled={!completedIntervalCount}>Précédent</button>
-            <button className="primary" onClick={() => setCompletedIntervalCount(Math.min(7, completedIntervalCount + 1))} disabled={completedIntervalCount >= 7}>Étape suivante</button>
+            <button
+              onClick={() => setCompletedIntervalCount(Math.max(0, completedIntervalCount - 1))}
+              disabled={!completedIntervalCount}
+            >Précédent</button>
+            <button
+              className="primary"
+              onClick={() => setCompletedIntervalCount(Math.min(7, completedIntervalCount + 1))}
+              disabled={completedIntervalCount >= 7}
+            >Étape suivante</button>
           </div>
         </section>
       )}
-      {!scale ? <EmptyDomain /> : null}
+      {!scale
+        ? <EmptyDomain />
+        : null}
     </Page>
   );
 }

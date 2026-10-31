@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import { LESSONS, MAJOR_SCALES, createEmptyProgress, createExercise, recordAttempt } from "@notescale/music";
+import {
+  LESSONS,
+  MAJOR_SCALES,
+  createEmptyProgress,
+  createExercise,
+  recordAttempt
+} from "@notescale/music";
 import App, * as application from "./App";
 import { ExerciseCard } from "./exercise-pages";
 import { ProgressContext, ProgressPage } from "./progress";
@@ -33,12 +39,15 @@ describe("web route states", () => {
 
   it("renders the shared lesson catalog with complete interval guidance", () => {
     const html = renderRoute("/apprendre");
+
     for (const lesson of LESSONS) {
       expect(html).toContain(lesson.title.replace(/^\d+\.\s*/, ""));
+
       for (const paragraph of lesson.paragraphs) {
         expect(html).toContain(paragraph);
       }
     }
+
     expect(html).toContain("Do–Ré : ton");
     expect(html).toContain("Après Mi, il faut un ton");
     expect(html).toContain('class="interval-pattern"');
@@ -75,9 +84,11 @@ describe("web route states", () => {
 
   it("names each catalog destination without changing its visible label", () => {
     const html = renderRoute("/gammes");
+
     for (const scale of MAJOR_SCALES) {
       expect(html).toContain(`aria-label="Détails de ${getScale(scale.id)!.frenchName}" href="/gammes/${encodeURIComponent(scale.id)}"`);
     }
+
     expect(html.match(/>Détails<\/a>/g)).toHaveLength(15);
   });
 
@@ -97,6 +108,7 @@ describe("web route states", () => {
       const html = renderToStaticMarkup(
         <ExerciseCard scale={getScale("C")!} exercise={exercise} />,
       );
+
       if (exercise.options) {
         expect(html).toContain('<legend>Ta réponse</legend>');
         expect(html.match(/type="radio"/g)).toHaveLength(exercise.options.length);
@@ -107,6 +119,7 @@ describe("web route states", () => {
         expect(html).toContain(`id="answer-help-${exercise.id}"`);
         expect(html).toContain("Sépare plusieurs notes");
       }
+
       expect(html).toContain('<div class="actions"><button class="primary">Valider ma réponse</button></div>');
     }
   });
@@ -114,10 +127,15 @@ describe("web route states", () => {
   it("offers an empty-progress continuation and uses singular and plural count labels", () => {
     const now = new Date();
     let progress = createEmptyProgress();
+
     for (let attemptCount = 0; attemptCount <= 2; attemptCount += 1) {
       const html = renderToStaticMarkup(
         <MemoryRouter>
-          <ProgressContext.Provider value={{ progress, ready: true, record: () => undefined }}>
+          <ProgressContext.Provider value={{
+            progress,
+            ready: true,
+            record: () => undefined
+          }}>
             <ProgressPage />
           </ProgressContext.Provider>
         </MemoryRouter>,
@@ -125,14 +143,20 @@ describe("web route states", () => {
       expect(html).toContain(`<b>${attemptCount}</b><span>${attemptCount === 1 ? "exercice" : "exercices"}</span>`);
       expect(html).toContain(`<b>${attemptCount}</b><span>${attemptCount === 1 ? "bonne réponse" : "bonnes réponses"}</span>`);
       expect(html).toContain(attemptCount === 0 ? '<b>0</b><span>jours de suite</span>' : '<b>1</b><span>jour de suite</span>');
+
       if (attemptCount === 0) {
         expect(html).toContain('href="/exercices"');
       } else {
         expect(html).not.toContain("Ta première gamme t’attend");
       }
+
       progress = recordAttempt(
         progress,
-        { scaleId: "C", exerciseType: "build-scale", correct: true },
+        {
+          scaleId: "C",
+          exerciseType: "build-scale",
+          correct: true
+        },
         now,
         () => attemptCount / 3,
       );

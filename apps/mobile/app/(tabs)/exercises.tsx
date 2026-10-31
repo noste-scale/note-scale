@@ -2,8 +2,24 @@ import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { isTonicId, type GradeResult } from "@notescale/music";
-import { Action, Body, Card, Chip, Formula, Heading, Notice, Row, Screen } from "../../src/components";
-import { displayGradeAnswer, gradeSelection, makeDailyExercises, makeExercise, type ExerciseView } from "../../src/domain";
+import {
+  Action,
+  Body,
+  Card,
+  Chip,
+  Formula,
+  Heading,
+  Notice,
+  Row,
+  Screen
+} from "../../src/components";
+import {
+  displayGradeAnswer,
+  gradeSelection,
+  makeDailyExercises,
+  makeExercise,
+  type ExerciseView
+} from "../../src/domain";
 import {
   attemptRecordingDecision,
   responseForExercise,
@@ -35,7 +51,11 @@ export default function ExercisesScreen() {
   const lastRecordedExerciseId = useRef<string | undefined>(undefined);
   const exercise = useMemo(
     // ponytail: sample progress only when hydration/generation changes so recording cannot replace the exercise being graded.
-    () => isDailySession ? dailyExercises[exerciseIndex] : makeExercise({ generation: exerciseIndex, preferredScaleId: scopedScaleId, progress }),
+    () => isDailySession ? dailyExercises[exerciseIndex] : makeExercise({
+      generation: exerciseIndex,
+      preferredScaleId: scopedScaleId,
+      progress
+    }),
     [isDailySession, dailyExercises, hydrated, exerciseIndex, scopedScaleId],
   );
   const currentResponse = responseForExercise(response, exercise?.id ?? "");
@@ -50,8 +70,10 @@ export default function ExercisesScreen() {
 
   const selectAnswer = (option: string) => {
     if (!exercise || isSubmitted) return;
+
     setResponse((previousResponse) => {
       const activeResponse = responseForExercise(previousResponse, exercise.id);
+
       return {
         exerciseId: exercise.id,
         selected: updateSelection(
@@ -67,10 +89,16 @@ export default function ExercisesScreen() {
 
   const submitAnswer = () => {
     if (!hydrated || !exercise || selectedAnswerLabels.length === 0) return;
+
     const gradeResult = gradeSelection(exercise, selectedAnswerLabels);
-    setResponse({ exerciseId: exercise.id, selected: selectedAnswerLabels, grade: gradeResult });
+    setResponse({
+      exerciseId: exercise.id,
+      selected: selectedAnswerLabels,
+      grade: gradeResult
+    });
     const recording = attemptRecordingDecision(lastRecordedExerciseId.current, exercise.id, gradeResult.graded);
     lastRecordedExerciseId.current = recording.lastRecordedExerciseId;
+
     if (recording.record) {
       recordAttempt(exercise.scaleId, gradeResult.correct, exercise.kind);
     }
@@ -83,12 +111,14 @@ export default function ExercisesScreen() {
     } else {
       setExerciseIndex((previousIndex) => previousIndex + 1);
     }
+
     setResponse(createEmptyResponse());
     lastRecordedExerciseId.current = undefined;
   };
 
   const startDailySession = () => {
     if (!hydrated) return;
+
     setDailyExercises(makeDailyExercises(progress));
     setDailySession(true);
     setExerciseIndex(0);
@@ -98,10 +128,12 @@ export default function ExercisesScreen() {
 
   const answerLabel = exercise?.selectionMode === "ordered" ? "Ta réponse ordonnée" : "Ta sélection";
   let chipRole: "radio" | "checkbox" | "button" = "button";
+
   if (exercise?.selectionMode === "single") chipRole = "radio";
   else if (exercise?.selectionMode === "multiple") chipRole = "checkbox";
 
   let subtitle = "Propose une réponse avant de voir la correction.";
+
   if (isDailySession) {
     subtitle = `Question ${exerciseIndex + 1} sur ${dailyExercises.length} · environ 3 à 5 minutes`;
   } else if (scopedScaleId) {
@@ -109,11 +141,13 @@ export default function ExercisesScreen() {
   }
 
   let validationHint = "Affiche ensuite la correction";
+
   if (!hydrated) validationHint = "Attends le chargement de ta progression";
   else if (selectedAnswerLabels.length === 0) validationHint = "Choisis d’abord une réponse";
 
   let answerFeedback = "";
   let correctionFeedback = "";
+
   if (exercise && isSubmitted && grade) {
     answerFeedback = grade.correct
       ? "Bonne réponse. "
@@ -128,9 +162,19 @@ export default function ExercisesScreen() {
       title={isDailySession ? "Entraînement quotidien" : "Exercices"}
       subtitle={subtitle}
     >
-      {warning ? <Notice danger>{warning}</Notice> : null}
-      {!hydrated ? <Notice>Chargement de ta progression : la validation sera disponible ensuite.</Notice> : null}
-      {!isDailySession ? <Action label="Lancer la session quotidienne" onPress={startDailySession} disabled={!hydrated} /> : null}
+      {warning
+        ? <Notice danger>{warning}</Notice>
+        : null}
+      {!hydrated
+        ? <Notice>Chargement de ta progression : la validation sera disponible ensuite.</Notice>
+        : null}
+      {!isDailySession
+        ? <Action
+          label="Lancer la session quotidienne"
+          onPress={startDailySession}
+          disabled={!hydrated}
+        />
+        : null}
       {isDailySession ? <Card>
         <Heading>Rappel</Heading>
         <Formula />
@@ -156,7 +200,11 @@ export default function ExercisesScreen() {
               ))}
             </Row>
           </View>
-          {selectedAnswerLabels.length ? <Body live>{answerLabel} : {selectedAnswerLabels.join(" – ")}</Body> : <Body muted>{exercise.selectionMode === "ordered" ? "Choisis les notes une à une, dans l’ordre." : "Aucun choix pour le moment."}</Body>}
+          {selectedAnswerLabels.length
+            ? <Body live>{answerLabel} : {selectedAnswerLabels.join(" – ")}</Body>
+            : <Body muted>{exercise.selectionMode === "ordered"
+              ? "Choisis les notes une à une, dans l’ordre."
+              : "Aucun choix pour le moment."}</Body>}
           {!isSubmitted && selectedAnswerLabels.length ? (
             <Row>
               {exercise.selectionMode === "ordered" ? <Action
@@ -172,10 +220,13 @@ export default function ExercisesScreen() {
             disabled={!hydrated || selectedAnswerLabels.length === 0}
             hint={validationHint}
           /> : null}
-          {grade && !grade.graded ? <Notice danger>{grade.validationMessage ?? "Propose une réponse avant de valider."}</Notice> : null}
+          {grade && !grade.graded
+            ? <Notice danger>{grade.validationMessage ?? "Propose une réponse avant de valider."}</Notice>
+            : null}
           {isSubmitted && grade ? (
             <Notice danger={!grade.correct}>
-              {answerFeedback}{correctionFeedback}
+              {answerFeedback}
+              {correctionFeedback}
             </Notice>
           ) : null}
           {isSubmitted ? <Action

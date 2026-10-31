@@ -34,6 +34,8 @@ export function isTonicId(value: string): value is TonicId {
 
 export function getScaleMetadata(id: TonicId): ScaleMetadata {
   const metadata = SCALE_CATALOG.find((entry) => entry.id === id);
+
   if (!metadata) throw new Error(`Missing catalog metadata for ${id}`);
+
   return metadata;
 }

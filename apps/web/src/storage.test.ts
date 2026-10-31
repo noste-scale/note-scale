@@ -1,4 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi
+} from "vitest";
 import {
   PROGRESS_STORAGE_KEY,
   createEmptyProgress,
@@ -45,12 +51,20 @@ describe("browser persistence adapter", () => {
   it("merges stored and current attempts before the last writer saves", async () => {
     const storedProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "build-scale", scaleId: "C", correct: true },
+      {
+        exerciseType: "build-scale",
+        scaleId: "C",
+        correct: true
+      },
       new Date("2026-08-10T10:00:00Z"),
     );
     const currentProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "find-error", scaleId: "G", correct: false },
+      {
+        exerciseType: "find-error",
+        scaleId: "G",
+        correct: false
+      },
       new Date("2026-08-11T10:00:00Z"),
     );
     let storedPayload = encodeProgress(storedProgress);
@@ -72,12 +86,20 @@ describe("browser persistence adapter", () => {
   it("merges a same-origin storage update without duplicating attempts", () => {
     const firstProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "build-scale", scaleId: "C", correct: true },
+      {
+        exerciseType: "build-scale",
+        scaleId: "C",
+        correct: true
+      },
       new Date("2026-08-10T10:00:00Z"),
     );
     const secondProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "find-error", scaleId: "G", correct: false },
+      {
+        exerciseType: "find-error",
+        scaleId: "G",
+        correct: false
+      },
       new Date("2026-08-11T10:00:00Z"),
     );
     const firstMerge = mergeStorageUpdate(firstProgress, encodeProgress(secondProgress));
@@ -90,29 +112,52 @@ describe("browser persistence adapter", () => {
   it("treats progress deletion and localStorage.clear as authoritative resets", () => {
     const currentProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "build-scale", scaleId: "C", correct: true },
+      {
+        exerciseType: "build-scale",
+        scaleId: "C",
+        correct: true
+      },
     );
+
     for (const key of [PROGRESS_STORAGE_KEY, null]) {
       const update = storageEventUpdate(currentProgress, key, null);
-      expect(update).toMatchObject({ reset: true, needsSave: false, canSave: true, status: "missing" });
+      expect(update).toMatchObject({
+        reset: true,
+        needsSave: false,
+        canSave: true,
+        status: "missing"
+      });
       expect(update?.state).toEqual(createEmptyProgress());
     }
+
     expect(storageEventUpdate(currentProgress, "notescale.theme", null)).toBeUndefined();
   });
 
   it("keeps ordinary cross-tab updates merged and stable across save/reload", async () => {
     const firstProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "build-scale", scaleId: "C", correct: true },
+      {
+        exerciseType: "build-scale",
+        scaleId: "C",
+        correct: true
+      },
       new Date("2026-08-10T10:00:00Z"),
     );
     const secondProgress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "find-error", scaleId: "G", correct: false },
+      {
+        exerciseType: "find-error",
+        scaleId: "G",
+        correct: false
+      },
       new Date("2026-08-11T10:00:00Z"),
     );
     const update = storageEventUpdate(firstProgress, PROGRESS_STORAGE_KEY, encodeProgress(secondProgress));
-    expect(update).toMatchObject({ reset: false, needsSave: true, canSave: true });
+    expect(update).toMatchObject({
+      reset: false,
+      needsSave: true,
+      canSave: true
+    });
     expect(update?.state.attempts).toHaveLength(2);
     expect(storageEventUpdate(update!.state, PROGRESS_STORAGE_KEY, encodeProgress(update!.state))).toMatchObject({ needsSave: false });
     let storedPayload: string | null = null;

@@ -11,6 +11,7 @@ export interface SequencedPitch {
 
 export function sampleKeyForPitch(pitchClass: number, octave: 4 | 5): SampleKey | undefined {
   if (!Number.isInteger(pitchClass) || pitchClass < 0 || pitchClass >= SAMPLE_STEMS.length) return undefined;
+
   return `${SAMPLE_STEMS[pitchClass]}${octave}` as SampleKey;
 }
 
@@ -21,12 +22,23 @@ export function orderedPitchSequence(
   let octave: 4 | 5 = 4;
   let previousPitchClass = -1;
   const ascendingPitches = pitchClasses.flatMap((pitchClass) => {
-    if (!Number.isInteger(pitchClass) || pitchClass < 0 || pitchClass > 11) return [];
+    if (!Number.isInteger(pitchClass)
+      || pitchClass < 0
+      || pitchClass > 11) return [];
     if (previousPitchClass >= 0 && pitchClass < previousPitchClass) octave = 5;
+
     previousPitchClass = pitchClass;
     const sampleKey = sampleKeyForPitch(pitchClass, octave);
-    return sampleKey ? [{ pitchClass, octave, sampleKey }] : [];
+
+    return sampleKey ? [
+      {
+        pitchClass,
+        octave,
+        sampleKey
+      }
+    ] : [];
   });
+
   return direction === "up" ? ascendingPitches : [...ascendingPitches].reverse();
 }
 
@@ -61,5 +73,6 @@ export function transitionPlayback(phase: PlaybackPhase, event: PlaybackEvent): 
   if (event === "pause") return phase === "playing" ? "paused" : phase;
   if (event === "resume") return phase === "paused" ? "playing" : phase;
   if (event === "complete") return phase === "playing" ? "completed" : phase;
+
   return phase === "playing" || phase === "paused" ? "preempted" : phase;
 }

@@ -21,19 +21,30 @@ const importBoundaries = {
     const isCore = importer.startsWith("packages/music/src/");
     const checkImport = (node) => {
       if (!node) return;
+
       const source = node?.type === "TemplateLiteral" && node.expressions.length === 0
         ? node.quasis[0].value.cooked
         : node?.value;
+
       if (typeof source !== "string") {
-        if (isCore) context.report({ node, messageId: "forbidden", data: { source: "nonliteral import", boundary: "Core imports require a literal module path." } });
+        if (isCore) context.report({
+          node,
+          messageId: "forbidden",
+          data: { source: "nonliteral import", boundary: "Core imports require a literal module path." }
+        });
+
         return;
       }
+
       const importPath = normalizePathCase(source);
       const isRelative = source.startsWith(".");
-      const target = isRelative || isAbsolute(source) ? projectPath(resolve(dirname(filename), source)) : importPath;
+      const target = isRelative || isAbsolute(source)
+        ? projectPath(resolve(dirname(filename), source))
+        : importPath;
       const staysInsideMusic = isRelative && target.startsWith(isCore ? "packages/music/src/" : "packages/music/");
       const importsTestRunner = importPath === "vitest" && !isCore;
       let boundary;
+
       if (importPath.startsWith("@react-native-async-storage/async-storage") && importer !== "apps/mobile/app/_layout.tsx") {
         boundary = "Inject StorageAdapter from app/_layout.tsx.";
       } else if (isMusic && !staysInsideMusic && !importsTestRunner) {
@@ -41,13 +52,19 @@ const importBoundaries = {
       } else if (app) {
         const targetApp = /^apps\/([^/]+)(?:\/|$)/.exec(target)?.[1]
           ?? /^@notescale\/(web|mobile)(?:\/|$)/.exec(importPath)?.[1];
+
         if (targetApp && targetApp !== app) boundary = "Apps cannot import another app.";
         else if ((target.startsWith("packages/") || importPath.startsWith("@notescale/music/")) && importPath !== "@notescale/music") {
           boundary = "Apps consume shared music through @notescale/music, not package internals.";
         }
       }
-      if (boundary) context.report({ node, messageId: "forbidden", data: { source, boundary } });
+      if (boundary) context.report({
+        node,
+        messageId: "forbidden",
+        data: { source, boundary }
+      });
     };
+
     return {
       ImportDeclaration: (node) => checkImport(node.source),
       ExportNamedDeclaration: (node) => checkImport(node.source),

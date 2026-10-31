@@ -13,7 +13,11 @@ describe("versioned local persistence", () => {
   it("round-trips valid progress", () => {
     const state = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "find-error", scaleId: "Gb", correct: true },
+      {
+        exerciseType: "find-error",
+        scaleId: "Gb",
+        correct: true
+      },
       new Date("2026-08-11T10:00:00.000Z"),
     );
     expect(decodeProgress(encodeProgress(state))).toEqual({
@@ -28,14 +32,21 @@ describe("versioned local persistence", () => {
     [null, null, "missing", true],
     ["not-json", "Progression locale illisible", "unreadable", false],
     [JSON.stringify({ version: 0, attempts: [] }), "Progression locale incompatible", "incompatible", false],
-  ] as const)("falls back safely for missing, corrupt or old payload %s", (storedPayload, warningPrefix, status, canSave) => {
+  ] as const)("falls back safely for missing, corrupt or old payload %s", (
+    storedPayload,
+    warningPrefix,
+    status,
+    canSave
+  ) => {
     const decodedProgress = decodeProgress(storedPayload);
     expect(decodedProgress.state).toEqual(createEmptyProgress());
+
     if (warningPrefix) {
       expect(decodedProgress.warning).toContain(warningPrefix);
     } else {
       expect(decodedProgress.warning).toBeNull();
     }
+
     expect(decodedProgress).toMatchObject({ status, canSave });
   });
 
@@ -44,10 +55,28 @@ describe("versioned local persistence", () => {
       JSON.stringify({
         version: 1,
         attempts: [
-          { id: "ok", exerciseType: "build-scale", scaleId: "C", correct: true, answeredAt: "2026-08-11T00:00:00.000Z" },
-          { id: "bad", exerciseType: "magic", correct: "yes", answeredAt: "never" },
+          {
+            id: "ok",
+            exerciseType: "build-scale",
+            scaleId: "C",
+            correct: true,
+            answeredAt: "2026-08-11T00:00:00.000Z"
+          },
+          {
+            id: "bad",
+            exerciseType: "magic",
+            correct: "yes",
+            answeredAt: "never"
+          },
         ],
-        reviews: { C: { scaleId: "C", stage: 0, dueAt: "bad", lastReviewedAt: "bad" } },
+        reviews: {
+          C: {
+            scaleId: "C",
+            stage: 0,
+            dueAt: "bad",
+            lastReviewedAt: "bad"
+          }
+        },
         streak: 4,
         lastTrainingDate: "2026-08-11",
       }),
@@ -60,7 +89,13 @@ describe("versioned local persistence", () => {
 
   it("normalizes impossible local-calendar dates with a warning", () => {
     const result = decodeProgress(
-      JSON.stringify({ version: 1, attempts: [], reviews: {}, streak: 9, lastTrainingDate: "2026-99-42" }),
+      JSON.stringify({
+        version: 1,
+        attempts: [],
+        reviews: {},
+        streak: 9,
+        lastTrainingDate: "2026-99-42"
+      }),
     );
     expect(result.state).toMatchObject({ streak: 9, lastTrainingDate: null });
     expect(result).toMatchObject({ status: "recovered", canSave: true });
@@ -71,13 +106,41 @@ describe("versioned local persistence", () => {
     const result = decodeProgress(JSON.stringify({
       version: 1,
       attempts: [
-        { id: "valid", exerciseType: "build-scale", scaleId: "C", correct: true, answeredAt: "2026-08-11T00:00:00.000Z" },
-        { id: "locale", exerciseType: "build-scale", scaleId: "G", correct: true, answeredAt: "8/11/2026" },
-        { id: "short-iso", exerciseType: "build-scale", scaleId: "D", correct: true, answeredAt: "2026-08-11T00:00:00Z" },
+        {
+          id: "valid",
+          exerciseType: "build-scale",
+          scaleId: "C",
+          correct: true,
+          answeredAt: "2026-08-11T00:00:00.000Z"
+        },
+        {
+          id: "locale",
+          exerciseType: "build-scale",
+          scaleId: "G",
+          correct: true,
+          answeredAt: "8/11/2026"
+        },
+        {
+          id: "short-iso",
+          exerciseType: "build-scale",
+          scaleId: "D",
+          correct: true,
+          answeredAt: "2026-08-11T00:00:00Z"
+        },
       ],
       reviews: {
-        C: { scaleId: "C", stage: 0, dueAt: "2026-08-12T00:00:00.000Z", lastReviewedAt: "2026-08-11T00:00:00.000Z" },
-        G: { scaleId: "G", stage: 0, dueAt: "2026-02-30T00:00:00.000Z", lastReviewedAt: "8/11/2026" },
+        C: {
+          scaleId: "C",
+          stage: 0,
+          dueAt: "2026-08-12T00:00:00.000Z",
+          lastReviewedAt: "2026-08-11T00:00:00.000Z"
+        },
+        G: {
+          scaleId: "G",
+          stage: 0,
+          dueAt: "2026-02-30T00:00:00.000Z",
+          lastReviewedAt: "8/11/2026"
+        },
       },
       streak: "4",
       lastTrainingDate: "11/08/2026",
@@ -115,7 +178,10 @@ describe("versioned local persistence", () => {
 
     expect(result.state.attempts.map(({ id }) => id)).toEqual(["earlier", "later"]);
     expect(result.state).toMatchObject({ streak: 2, lastTrainingDate: "2026-08-12" });
-    expect(result.state.reviews).toMatchObject({ C: { stage: -1 }, D: { stage: 0 } });
+    expect(result.state.reviews).toMatchObject({
+      C: { stage: -1 },
+      D: { stage: 0 }
+    });
     expect(result).toMatchObject({ status: "recovered", canSave: true });
     expect(result.warning).not.toBeNull();
   });

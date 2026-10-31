@@ -14,6 +14,7 @@ export default function RootLayout() {
 
 function Navigation() {
   const theme = useTheme();
+
   return (
     <ProgressProvider storage={AsyncStorage}>
       <StatusBar style={theme.background === "#101619" ? "light" : "dark"} />

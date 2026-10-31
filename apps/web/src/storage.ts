@@ -23,6 +23,7 @@ export interface BrowserStorageUpdate extends PersistenceResult {
 
 function resolveBrowserStorage(storage?: BrowserStorage): BrowserStorage | undefined {
   if (storage) return storage;
+
   try {
     return window.localStorage;
   } catch {
@@ -41,6 +42,7 @@ function createUnavailableProgress(): PersistenceResult {
 
 function readStoredProgress(storage: BrowserStorage | undefined): PersistenceResult {
   if (!storage) return createUnavailableProgress();
+
   try {
     return decodeProgress(storage.getItem(PROGRESS_STORAGE_KEY));
   } catch {
@@ -55,14 +57,25 @@ export function loadBrowserProgress(storage?: BrowserStorage): Promise<Persisten
 export function saveBrowserProgress(state: ProgressState, storage?: BrowserStorage): Promise<BrowserSaveResult> {
   const targetStorage = resolveBrowserStorage(storage);
   const storedProgress = readStoredProgress(targetStorage);
+
   if (!targetStorage || !storedProgress.canSave) {
-    return Promise.resolve({ state, warning: storedProgress.warning, saved: false });
+    return Promise.resolve({
+      state,
+      warning: storedProgress.warning,
+      saved: false
+    });
   }
 
   const mergedProgress = mergeProgressStates(storedProgress.state, state);
+
   try {
     targetStorage.setItem(PROGRESS_STORAGE_KEY, encodeProgress(mergedProgress));
-    return Promise.resolve({ state: mergedProgress, warning: storedProgress.warning, saved: true });
+
+    return Promise.resolve({
+      state: mergedProgress,
+      warning: storedProgress.warning,
+      saved: true
+    });
   } catch {
     return Promise.resolve({
       state: mergedProgress,
@@ -74,6 +87,7 @@ export function saveBrowserProgress(state: ProgressState, storage?: BrowserStora
 
 export function mergeStorageUpdate(currentProgress: ProgressState, storedPayload: string | null): PersistenceResult {
   const incomingProgress = decodeProgress(storedPayload);
+
   return incomingProgress.canSave
     ? { ...incomingProgress, state: mergeProgressStates(currentProgress, incomingProgress.state) }
     : { ...incomingProgress, state: currentProgress };
@@ -86,10 +100,17 @@ export function storageEventUpdate(
 ): BrowserStorageUpdate | undefined {
   if (storageKey !== null && storageKey !== PROGRESS_STORAGE_KEY) return undefined;
   if (storedPayload === null) {
-    return { ...decodeProgress(null), state: createEmptyProgress(), reset: true, needsSave: false };
+    return {
+      ...decodeProgress(null),
+      state: createEmptyProgress(),
+      reset: true,
+      needsSave: false
+    };
   }
+
   const incomingProgress = decodeProgress(storedPayload);
   const state = incomingProgress.canSave ? mergeProgressStates(currentProgress, incomingProgress.state) : currentProgress;
+
   return {
     ...incomingProgress,
     state,

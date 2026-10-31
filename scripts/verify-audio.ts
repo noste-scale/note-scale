@@ -22,11 +22,15 @@ function estimateFrequency(wavBytes: Buffer, sampleRateHz: number): number {
   const lastFrame = Math.min(Math.floor(sampleRateHz * 0.45), (wavBytes.length - 44) / 2);
   let risingZeroCrossings = 0;
   let previousSample = wavBytes.readInt16LE(44 + firstFrame * 2);
+
   for (let frameIndex = firstFrame + 1; frameIndex < lastFrame; frameIndex += 1) {
     const currentSample = wavBytes.readInt16LE(44 + frameIndex * 2);
+
     if (previousSample <= 0 && currentSample > 0) risingZeroCrossings += 1;
+
     previousSample = currentSample;
   }
+
   return risingZeroCrossings * sampleRateHz / (lastFrame - firstFrame);
 }
 
@@ -35,10 +39,12 @@ const canonicalSamples = new Map<string, Buffer>();
 
 for (const [directoryIndex, audioDirectory] of audioDirectories.entries()) {
   const audioInventory = (await readdir(audioDirectory)).filter((name) => name.endsWith(".wav")).sort();
+
   assert.deepEqual(audioInventory, expectedInventory, `${audioDirectory} must contain exactly the 24 generated WAV files`);
 
   for (const expectedNote of expectedNotes) {
     const wavBytes = await readFile(join(audioDirectory, expectedNote.filename));
+
     assert.equal(wavBytes.toString("ascii", 0, 4), "RIFF", `${expectedNote.filename}: RIFF header`);
     assert.equal(wavBytes.toString("ascii", 8, 12), "WAVE", `${expectedNote.filename}: WAVE header`);
     assert.equal(wavBytes.readUInt16LE(20), 1, `${expectedNote.filename}: PCM encoding`);

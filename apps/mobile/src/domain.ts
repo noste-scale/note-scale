@@ -47,6 +47,7 @@ const createScaleView = (scale: MajorScale): ScaleView => ({
   keySignatureCount: scale.keySignatureCount,
   construction: scale.construction.map((step) => {
     let necessaryAlteration = "aucune";
+
     if (step.alteration === "sharp") necessaryAlteration = "dièse";
     else if (step.alteration === "flat") necessaryAlteration = "bémol";
 
@@ -101,24 +102,33 @@ function chooseRandomIndex(candidateCount: number, rng: () => number): number {
   const boundedRandomValue = Number.isFinite(randomValue)
     ? Math.min(Math.max(randomValue, 0), 0.999999999999)
     : 0;
+
   return Math.floor(boundedRandomValue * candidateCount);
 }
 
 function createSeededRandom(seed: number): () => number {
   let randomState = (seed + 1) >>> 0;
+
   return () => {
     randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+
     return randomState / 4294967296;
   };
 }
 
 function formatAnswerLabels(type: ExerciseKind, answers: readonly string[]): string {
-  if (answers.length === 0 || (type === "find-accidentals" && answers[0]?.toLocaleLowerCase("fr") === "aucune")) return "Aucune";
+  if (
+    answers.length === 0
+    || (type === "find-accidentals" && answers[0]?.toLocaleLowerCase("fr") === "aucune")
+  ) return "Aucune";
+
   const formattedAnswers = answers.map((answer) => formatNote(answer));
+
   if (type === "build-scale") return formattedAnswers.join(" – ");
   if (type === "complete-scale") return formattedAnswers.join(" et ");
   if (type === "find-accidentals") return formattedAnswers.join(", ");
   if (type === "identify-interval") return formattedAnswers[0] === "demi-ton" ? "Un demi-ton" : "Un ton";
+
   return formattedAnswers.join(", ");
 }
 
@@ -133,28 +143,44 @@ interface ExerciseOptions {
 }
 
 export function selectExerciseScale({ rng = Math.random, now = new Date(), ...options }: ExerciseOptions): MajorScale | undefined {
-  return selectMobileTrainingScale({ ...options, rng, now });
+  return selectMobileTrainingScale({
+    ...options,
+    rng,
+    now
+  });
 }
 
 export function makeExercise({ rng = Math.random, now = new Date(), ...options }: ExerciseOptions): ExerciseView | undefined {
-  const selection = createMobileTrainingExercise({ ...options, rng, now });
+  const selection = createMobileTrainingExercise({
+    ...options,
+    rng,
+    now
+  });
+
   return selection ? createExerciseView(selection.exercise, selection.scale, rng) : undefined;
 }
 
 function shuffleValues<T>(values: readonly T[], rng: () => number): T[] {
   const shuffledValues = [...values];
+
   for (let index = shuffledValues.length - 1; index > 0; index -= 1) {
     const swapIndex = chooseRandomIndex(index + 1, rng);
     [shuffledValues[index], shuffledValues[swapIndex]] = [shuffledValues[swapIndex] as T, shuffledValues[index] as T];
   }
+
   return shuffledValues;
 }
 
-function createExerciseView(exercise: Exercise, scale: MajorScale, rng: () => number): ExerciseView {
+function createExerciseView(
+  exercise: Exercise,
+  scale: MajorScale,
+  rng: () => number
+): ExerciseView {
   const answer = formatExerciseAnswer(exercise);
   const distractorScale = MAJOR_SCALES.find((scaleOption) => scaleOption.id !== scale.id) ?? scale;
   const distractorExercise = createExercise(exercise.type, distractorScale, rng);
   let answerCandidates = exercise.options;
+
   if (!answerCandidates) {
     if (exercise.type === "build-scale") {
       answerCandidates = [...scale.notes, ...distractorScale.notes];
@@ -164,26 +190,35 @@ function createExerciseView(exercise: Exercise, scale: MajorScale, rng: () => nu
       answerCandidates = [...exercise.correctAnswer, ...distractorExercise.correctAnswer];
     }
   }
+
   const payloadsByLabel = new Map<string, readonly string[]>();
+
   for (const option of answerCandidates) {
     let label: string;
+
     if (option === "demi-ton") label = "Un demi-ton";
     else if (option === "ton") label = "Un ton";
     else if (option.toLocaleLowerCase("fr") === "aucune") label = "Aucune";
     else label = formatNote(option);
+
     payloadsByLabel.set(label, [option]);
   }
+
   const options = shuffleValues([...payloadsByLabel.keys()], rng);
   const optionPayloads = Object.fromEntries(payloadsByLabel) as Record<string, readonly string[]>;
   let selectionMode: ExerciseSelectionMode = "single";
+
   if (exercise.type === "find-accidentals") selectionMode = "multiple";
   else if (exercise.type === "complete-scale" || exercise.type === "build-scale") selectionMode = "ordered";
+
   const noneOption = options.find((option) => option === "Aucune");
   let question = exercise.question;
+
   if (exercise.promptNotes?.length) {
     const promptNotes = exercise.promptNotes.map((note) => note === "___" ? note : formatNote(note));
     question = `${exercise.question}\n${promptNotes.join(" – ")}`;
   }
+
   return {
     id: exercise.id,
     kind: exercise.type,
@@ -204,6 +239,7 @@ function createExerciseView(exercise: Exercise, scale: MajorScale, rng: () => nu
 
 export function gradeSelection(exercise: ExerciseView, selected: readonly string[] | string): GradeResult {
   const selectedLabels = typeof selected === "string" ? [selected] : selected;
+
   return gradeExercise(exercise.domainExercise, selectionPayload(selectedLabels, exercise.optionPayloads));
 }
 
@@ -214,8 +250,12 @@ export function displayGradeAnswer(answers: readonly string[], kind: ExerciseKin
 export function makeDailyExercises(progress: ProgressState, now = new Date()): ExerciseView[] {
   const dateSeed = Number(localDateKey(now).replaceAll("-", ""));
   const session = createDailySession(progress, createSeededRandom(dateSeed), now);
+
   return [session.naturalSemitoneQuestion, ...session.scaleExercises].map((exercise, index) => {
     const scale = MAJOR_SCALES.find((scaleOption) => scaleOption.id === exercise.scaleId) ?? MAJOR_SCALES[index] ?? MAJOR_SCALES[0];
-    return scale ? createExerciseView(exercise, scale, createSeededRandom(dateSeed + index)) : undefined;
+
+    return scale
+      ? createExerciseView(exercise, scale, createSeededRandom(dateSeed + index))
+      : undefined;
   }).filter((exercise): exercise is ExerciseView => Boolean(exercise));
 }

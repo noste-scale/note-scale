@@ -1,5 +1,13 @@
 import type { StorageAdapter } from "@notescale/music";
-import { createContext, type PropsWithChildren, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type PropsWithChildren,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { useColorScheme } from "react-native";
 import { createSerializedSaver } from "./progress-state";
 import { nextThemePreference, shouldApplyStoredPreference, type ThemePreference } from "./theme-state";
@@ -33,10 +41,18 @@ export const dark = {
 } as const;
 
 export type Theme = typeof light | typeof dark;
-interface ThemeContextValue { theme: Theme; preference: ThemePreference; cyclePreference: () => void }
+interface ThemeContextValue {
+  theme: Theme;
+  preference: ThemePreference;
+  cyclePreference: () => void
+}
+
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-export function ThemeProvider({ children, storage: suppliedStorage }: PropsWithChildren<{ storage: StorageAdapter }>) {
+export function ThemeProvider({
+  children,
+  storage: suppliedStorage
+}: PropsWithChildren<{ storage: StorageAdapter }>) {
   const storage = useRef(suppliedStorage).current;
   const systemColorScheme = useColorScheme();
   const [preference, setPreference] = useState<ThemePreference>("system");
@@ -45,17 +61,27 @@ export function ThemeProvider({ children, storage: suppliedStorage }: PropsWithC
   const savePreference = useRef(createSerializedSaver(
     async (value: ThemePreference) => storage.setItem("notescale.theme", value),
   )).current;
+
   useEffect(() => {
     let isEffectActive = true;
     const loadRevision = preferenceRevision.current;
+
     Promise.resolve().then(() => storage.getItem("notescale.theme")).then((storedPreference) => {
-      if (isEffectActive && shouldApplyStoredPreference(loadRevision, preferenceRevision.current) && (storedPreference === "system" || storedPreference === "light" || storedPreference === "dark")) {
+      if (isEffectActive
+        && shouldApplyStoredPreference(loadRevision, preferenceRevision.current)
+        && (storedPreference === "system"
+          || storedPreference === "light"
+          || storedPreference === "dark")) {
         preferenceRef.current = storedPreference;
         setPreference(storedPreference);
       }
     }).catch(() => undefined);
-    return () => { isEffectActive = false; };
+
+    return () => {
+      isEffectActive = false;
+    };
   }, [storage]);
+
   const cyclePreference = () => {
     preferenceRevision.current += 1;
     const nextPreference = nextThemePreference(preferenceRef.current);
@@ -63,8 +89,15 @@ export function ThemeProvider({ children, storage: suppliedStorage }: PropsWithC
     setPreference(nextPreference);
     void savePreference(nextPreference).catch(() => undefined);
   };
-  const theme = preference === "dark" || (preference === "system" && systemColorScheme === "dark") ? dark : light;
-  const contextValue = useMemo(() => ({ theme, preference, cyclePreference }), [preference, theme]);
+  const theme = preference === "dark" || (preference === "system" && systemColorScheme === "dark")
+    ? dark
+    : light;
+  const contextValue = useMemo(() => ({
+    theme,
+    preference,
+    cyclePreference
+  }), [preference, theme]);
+
   return (
     <ThemeContext.Provider value={contextValue}>
       {children}
@@ -75,11 +108,14 @@ export function ThemeProvider({ children, storage: suppliedStorage }: PropsWithC
 export function useTheme(): Theme {
   const themeContext = useContext(ThemeContext);
   const systemColorScheme = useColorScheme();
+
   return themeContext?.theme ?? (systemColorScheme === "dark" ? dark : light);
 }
 
 export function useThemePreference(): Pick<ThemeContextValue, "preference" | "cyclePreference"> {
   const themeContext = useContext(ThemeContext);
+
   if (!themeContext) throw new Error("useThemePreference must be used inside ThemeProvider");
+
   return themeContext;
 }

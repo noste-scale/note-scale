@@ -30,7 +30,10 @@ export function shouldPersistHydration(canSave: boolean, pendingCount: number): 
 export function resolveHydration(
   result: PersistenceResult,
   pending: readonly PendingAttempt[],
-): { progress: ProgressState; shouldSave: boolean } {
+): {
+  progress: ProgressState;
+  shouldSave: boolean
+} {
   return {
     progress: mergePendingAttempts(result.state, pending),
     shouldSave: shouldPersistHydration(result.canSave, pending.length),
@@ -43,6 +46,7 @@ export function persistenceWarningAfterSave(result: string | null): string | und
 
 export function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
   const timeoutDuration = Number.isFinite(timeoutMs) && timeoutMs >= 0 ? timeoutMs : 0;
+
   return new Promise<T>((resolve, reject) => {
     const timeoutTimer = setTimeout(() => reject(new Error("storage operation timed out")), timeoutDuration);
     operation.then(
@@ -70,14 +74,17 @@ export async function loadProgressWithRetry(
   timeoutMs = STORAGE_OPERATION_TIMEOUT_MS,
 ): Promise<PersistenceResult> {
   let lastLoadResult = createUnavailableResult();
+
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       lastLoadResult = await withTimeout(load(), timeoutMs);
+
       if (lastLoadResult.status !== "unavailable") return lastLoadResult;
     } catch {
       lastLoadResult = createUnavailableResult();
     }
   }
+
   return lastLoadResult;
 }
 
@@ -89,10 +96,13 @@ export function createSerializedSaver<T, R>(
   let latestSnapshot: T;
   const enqueueSave = (snapshot: T, updateLatest: boolean): Promise<R> => {
     if (updateLatest) latestSnapshot = snapshot;
+
     let nativeSavePromise: Promise<R> | undefined;
     const queuedSave = saveQueue.then(() => {
       nativeSavePromise = save(snapshot);
+
       if (timeoutMs === undefined) return nativeSavePromise;
+
       return withTimeout(nativeSavePromise, timeoutMs).catch((error: unknown) => {
         // A timed-out native write cannot be cancelled. If it later lands stale,
         // serialize one repair write with the newest snapshot behind it.
@@ -103,7 +113,9 @@ export function createSerializedSaver<T, R>(
       });
     });
     saveQueue = queuedSave.then(() => undefined, () => undefined);
+
     return queuedSave;
   };
+
   return (snapshot: T): Promise<R> => enqueueSave(snapshot, true);
 }

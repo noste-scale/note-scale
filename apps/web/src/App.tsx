@@ -19,22 +19,35 @@ function Layout() {
     }
   });
   const [hasOfflineWarning, setHasOfflineWarning] = useState(false);
+
   useEffect(() => {
     document.documentElement.dataset.theme = isDarkTheme ? "dark" : "light";
+
     try {
       localStorage.setItem("notescale.theme", isDarkTheme ? "dark" : "light");
     } catch { /* Progress storage already surfaces the non-blocking persistence warning. */ }
   }, [isDarkTheme]);
+
   useEffect(() => {
     const showOfflineWarning = () => setHasOfflineWarning(true);
     window.addEventListener("notescale-offline-error", showOfflineWarning);
+
     return () => window.removeEventListener("notescale-offline-error", showOfflineWarning);
   }, []);
+
   return (
     <>
-      <button type="button" className="skip" onClick={() => focusMainContent(document)}>Aller au contenu</button>
+      <button
+        type="button"
+        className="skip"
+        onClick={() => focusMainContent(document)}
+      >Aller au contenu</button>
       <header>
-        <Link className="brand" to="/" aria-label="NoteScale, accueil">♪ NoteScale</Link>
+        <Link
+          className="brand"
+          to="/"
+          aria-label="NoteScale, accueil"
+        >♪ NoteScale</Link>
         <button
           className="theme"
           onClick={() => setIsDarkTheme(!isDarkTheme)}
@@ -46,8 +59,13 @@ function Layout() {
       {hasOfflineWarning && <p className="banner" role="status">Mode hors ligne non installé. Recharge la page en ligne pour réessayer.</p>}
       <nav className="tabs" aria-label="Navigation principale">
         {NAV_ITEMS.map(({ to, icon, label }) => (
-          <NavLink key={to} end={to === '/'} to={to}>
-            <span aria-hidden="true">{icon}</span>{label}
+          <NavLink
+            key={to}
+            end={to === '/'}
+            to={to}
+          >
+            <span aria-hidden="true">{icon}</span>
+            {label}
           </NavLink>
         ))}
       </nav>
@@ -69,12 +87,30 @@ function Layout() {
 }
 
 const NAV_ITEMS = [
-  { to: "/", icon: "⌂", label: "Accueil" },
-  { to: "/apprendre", icon: "◎", label: "Apprendre" },
-  { to: "/exercices", icon: "✎", label: "Exercices" },
-  { to: "/progression", icon: "▥", label: "Progression" },
+  {
+    to: "/",
+    icon: "⌂",
+    label: "Accueil"
+  },
+  {
+    to: "/apprendre",
+    icon: "◎",
+    label: "Apprendre"
+  },
+  {
+    to: "/exercices",
+    icon: "✎",
+    label: "Exercices"
+  },
+  {
+    to: "/progression",
+    icon: "▥",
+    label: "Progression"
+  },
 ] as const;
 
 export default function App() {
-  return <ProgressProvider><Layout /></ProgressProvider>;
+  return <ProgressProvider>
+    <Layout />
+  </ProgressProvider>;
 }

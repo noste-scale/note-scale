@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-export function Page({ title, intro, children }: { title: string; intro?: string; children: ReactNode }) {
+export function Page({ title, intro, children }: {
+  title: string;
+  intro?: string;
+  children: ReactNode
+}) {
   return (
     <section className="page">
       <h1>{title}</h1>
@@ -11,8 +15,14 @@ export function Page({ title, intro, children }: { title: string; intro?: string
   );
 }
 
-export function Stat({ value, label }: { value: string | number; label: string }) {
-  return <div className="stat"><b>{value}</b><span>{label}</span></div>;
+export function Stat({ value, label }: {
+  value: string | number;
+  label: string
+}) {
+  return <div className="stat">
+    <b>{value}</b>
+    <span>{label}</span>
+  </div>;
 }
 
 export function EmptyDomain() {

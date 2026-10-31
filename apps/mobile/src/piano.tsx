@@ -1,25 +1,93 @@
 import { normalizeNoteId, pitchClassOf } from "@notescale/music";
 import { useRef } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View
+} from "react-native";
 import { useTheme } from "./theme";
 
 const pianoKeys = [
-  { id: "C", label: "Do", isBlackKey: false, whiteKeyPosition: 0 },
-  { id: "C#", label: "Do♯ / Ré♭", isBlackKey: true, whiteKeyPosition: 1 },
-  { id: "D", label: "Ré", isBlackKey: false, whiteKeyPosition: 1 },
-  { id: "D#", label: "Ré♯ / Mi♭", isBlackKey: true, whiteKeyPosition: 2 },
-  { id: "E", label: "Mi", isBlackKey: false, whiteKeyPosition: 2 },
-  { id: "F", label: "Fa", isBlackKey: false, whiteKeyPosition: 3 },
-  { id: "F#", label: "Fa♯ / Sol♭", isBlackKey: true, whiteKeyPosition: 4 },
-  { id: "G", label: "Sol", isBlackKey: false, whiteKeyPosition: 4 },
-  { id: "G#", label: "Sol♯ / La♭", isBlackKey: true, whiteKeyPosition: 5 },
-  { id: "A", label: "La", isBlackKey: false, whiteKeyPosition: 5 },
-  { id: "A#", label: "La♯ / Si♭", isBlackKey: true, whiteKeyPosition: 6 },
-  { id: "B", label: "Si", isBlackKey: false, whiteKeyPosition: 6 },
+  {
+    id: "C",
+    label: "Do",
+    isBlackKey: false,
+    whiteKeyPosition: 0
+  },
+  {
+    id: "C#",
+    label: "Do♯ / Ré♭",
+    isBlackKey: true,
+    whiteKeyPosition: 1
+  },
+  {
+    id: "D",
+    label: "Ré",
+    isBlackKey: false,
+    whiteKeyPosition: 1
+  },
+  {
+    id: "D#",
+    label: "Ré♯ / Mi♭",
+    isBlackKey: true,
+    whiteKeyPosition: 2
+  },
+  {
+    id: "E",
+    label: "Mi",
+    isBlackKey: false,
+    whiteKeyPosition: 2
+  },
+  {
+    id: "F",
+    label: "Fa",
+    isBlackKey: false,
+    whiteKeyPosition: 3
+  },
+  {
+    id: "F#",
+    label: "Fa♯ / Sol♭",
+    isBlackKey: true,
+    whiteKeyPosition: 4
+  },
+  {
+    id: "G",
+    label: "Sol",
+    isBlackKey: false,
+    whiteKeyPosition: 4
+  },
+  {
+    id: "G#",
+    label: "Sol♯ / La♭",
+    isBlackKey: true,
+    whiteKeyPosition: 5
+  },
+  {
+    id: "A",
+    label: "La",
+    isBlackKey: false,
+    whiteKeyPosition: 5
+  },
+  {
+    id: "A#",
+    label: "La♯ / Si♭",
+    isBlackKey: true,
+    whiteKeyPosition: 6
+  },
+  {
+    id: "B",
+    label: "Si",
+    isBlackKey: false,
+    whiteKeyPosition: 6
+  },
 ] as const;
 
 const getNotePitchClass = (note: string): number | undefined => {
   const normalizedNote = normalizeNoteId(note);
+
   return normalizedNote ? pitchClassOf(normalizedNote) : undefined;
 };
 
@@ -46,8 +114,10 @@ export function Piano({
   });
   const scalePitchClasses = new Set(activeNotes.flatMap((note) => {
     const pitchClass = getNotePitchClass(note);
+
     return pitchClass === undefined ? [] : [pitchClass];
   }));
+
   return (
     <View accessibilityLabel="Clavier chromatique interactif">
       <Text accessibilityLiveRegion="none" style={[styles.caption, { color: theme.muted }]}>En jaune : notes de la gamme. Fais glisser le clavier.</Text>
@@ -68,6 +138,7 @@ export function Piano({
             const isSounding = keyPitchClass === soundingPitch;
             let backgroundColor = pianoKey.isBlackKey ? "#182027" : "#FFFFFF";
             let color = pianoKey.isBlackKey ? "#FFFFFF" : "#182027";
+
             if (isScaleNote) {
               backgroundColor = theme.accent;
               color = "#182027";
@@ -76,6 +147,7 @@ export function Piano({
               backgroundColor = theme.primary;
               color = theme.primaryText;
             }
+
             return (
               <Pressable
                 key={pianoKey.id}
@@ -84,15 +156,18 @@ export function Piano({
                 accessibilityHint="Joue cette hauteur avec un fichier audio local"
                 accessibilityState={{ selected: isSounding }}
                 onPress={() => onPlayNote(pianoKey.id)}
-                style={({ pressed }) => [styles.key, {
-                  left: pianoKey.whiteKeyPosition * whiteKeyWidth - (pianoKey.isBlackKey ? blackKeyWidth / 2 : 0),
-                  width: pianoKey.isBlackKey ? blackKeyWidth : whiteKeyWidth,
-                  height: (pianoKey.isBlackKey ? 108 : 180) * keyboardScale,
-                  zIndex: pianoKey.isBlackKey ? 1 : 0,
-                  backgroundColor,
-                  borderColor: isSounding ? theme.focus : theme.border,
-                  opacity: pressed ? 0.75 : 1
-                }]}
+                style={({ pressed }) => [
+                  styles.key,
+                  {
+                    left: pianoKey.whiteKeyPosition * whiteKeyWidth - (pianoKey.isBlackKey ? blackKeyWidth / 2 : 0),
+                    width: pianoKey.isBlackKey ? blackKeyWidth : whiteKeyWidth,
+                    height: (pianoKey.isBlackKey ? 108 : 180) * keyboardScale,
+                    zIndex: pianoKey.isBlackKey ? 1 : 0,
+                    backgroundColor,
+                    borderColor: isSounding ? theme.focus : theme.border,
+                    opacity: pressed ? 0.75 : 1
+                  }
+                ]}
               >
                 <Text style={[styles.keyText, { color }]}>{pianoKey.label.replace(" / ", "\n")}</Text>
               </Pressable>
@@ -115,5 +190,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 4
   },
-  keyText: { fontSize: 12, fontWeight: "700", textAlign: "center" },
+  keyText: {
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center"
+  },
 });

@@ -20,29 +20,47 @@ const EXERCISE_TYPES = new Set<ExerciseType>([
 ]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === "object"
+    && value !== null
+    && !Array.isArray(value);
 }
 
 function isCanonicalIsoDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
+
   const parsedInstant = new Date(value);
+
   return !Number.isNaN(parsedInstant.getTime()) && parsedInstant.toISOString() === value;
 }
 
 function isValidLocalDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
+
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
   if (!match) return false;
+
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const parsedCalendarDay = new Date(Date.UTC(year, month - 1, day));
-  return parsedCalendarDay.getUTCFullYear() === year && parsedCalendarDay.getUTCMonth() === month - 1 && parsedCalendarDay.getUTCDate() === day;
+
+  return parsedCalendarDay.getUTCFullYear() === year
+    && parsedCalendarDay.getUTCMonth() === month - 1
+    && parsedCalendarDay.getUTCDate() === day;
 }
 
 function parseAttempt(value: unknown): Attempt | null {
   if (!isObject(value)) return null;
-  const { id, exerciseType, scaleId, correct, answeredAt } = value;
+
+  const {
+    id,
+    exerciseType,
+    scaleId,
+    correct,
+    answeredAt
+  } = value;
+
   if (
     typeof id !== "string" ||
     id.trim() === "" ||
@@ -54,6 +72,7 @@ function parseAttempt(value: unknown): Attempt | null {
   ) {
     return null;
   }
+
   return {
     id,
     exerciseType: exerciseType as ExerciseType,
@@ -65,7 +84,9 @@ function parseAttempt(value: unknown): Attempt | null {
 
 function parseReview(key: string, value: unknown): ReviewRecord | null {
   if (!isTonicId(key) || !isObject(value)) return null;
+
   const { scaleId, stage, dueAt, lastReviewedAt } = value;
+
   if (
     scaleId !== key ||
     typeof stage !== "number" ||
@@ -77,7 +98,13 @@ function parseReview(key: string, value: unknown): ReviewRecord | null {
   ) {
     return null;
   }
-  return { scaleId, stage, dueAt, lastReviewedAt } as ReviewRecord;
+
+  return {
+    scaleId,
+    stage,
+    dueAt,
+    lastReviewedAt
+  } as ReviewRecord;
 }
 
 export function encodeProgress(state: ProgressState): string {
@@ -86,10 +113,17 @@ export function encodeProgress(state: ProgressState): string {
 
 export function decodeProgress(raw: string | null): PersistenceResult {
   if (raw === null || raw.trim() === "") {
-    return { state: createEmptyProgress(), warning: null, status: "missing", canSave: true };
+    return {
+      state: createEmptyProgress(),
+      warning: null,
+      status: "missing",
+      canSave: true
+    };
   }
+
   try {
     const storedProgress: unknown = JSON.parse(raw);
+
     if (!isObject(storedProgress) || storedProgress.version !== 1) {
       return {
         state: createEmptyProgress(),
@@ -98,19 +132,25 @@ export function decodeProgress(raw: string | null): PersistenceResult {
         canSave: false,
       };
     }
+
     const parsedAttempts = Array.isArray(storedProgress.attempts)
       ? storedProgress.attempts.map(parseAttempt).filter((attempt): attempt is Attempt => attempt !== null)
       : [];
     const normalizedAttempts = normalizeProgressAttempts(parsedAttempts);
     const attempts = normalizedAttempts.attempts;
     const reviews: Partial<Record<TonicId, ReviewRecord>> = {};
+
     if (isObject(storedProgress.reviews)) {
       for (const [scaleId, storedReview] of Object.entries(storedProgress.reviews)) {
         const review = parseReview(scaleId, storedReview);
+
         if (review) reviews[review.scaleId] = review;
       }
     }
-    const hasValidStreak = typeof storedProgress.streak === "number" && Number.isInteger(storedProgress.streak) && storedProgress.streak >= 0;
+
+    const hasValidStreak = typeof storedProgress.streak === "number"
+      && Number.isInteger(storedProgress.streak)
+      && storedProgress.streak >= 0;
     const streak = hasValidStreak ? storedProgress.streak as number : 0;
     const hasValidTrainingDate = storedProgress.lastTrainingDate === null || isValidLocalDate(storedProgress.lastTrainingDate);
     const lastTrainingDate = isValidLocalDate(storedProgress.lastTrainingDate) ? storedProgress.lastTrainingDate : null;
@@ -126,15 +166,26 @@ export function decodeProgress(raw: string | null): PersistenceResult {
       !hasValidTrainingDate;
     const rebuiltProgress = attemptsNeedNormalization ? rebuildProgressFromAttempts(attempts) : null;
     let warning: string | null = null;
+
     if (attemptsNeedNormalization) {
       warning = "Des tentatives en double ou hors ordre ont \u00e9t\u00e9 normalis\u00e9es.";
     } else if (hasInvalidFields) {
       warning = "Certaines donn\u00e9es locales invalides ont \u00e9t\u00e9 ignor\u00e9es.";
     }
+
     return {
       state: rebuiltProgress
-        ? { ...rebuiltProgress, reviews: { ...reviews, ...rebuiltProgress.reviews } }
-        : { version: 1, attempts, reviews, streak, lastTrainingDate },
+        ? {
+          ...rebuiltProgress,
+          reviews: { ...reviews, ...rebuiltProgress.reviews }
+        }
+        : {
+          version: 1,
+          attempts,
+          reviews,
+          streak,
+          lastTrainingDate
+        },
       warning,
       status: hasInvalidFields ? "recovered" : "valid",
       canSave: true,
@@ -165,6 +216,7 @@ export async function safeLoadProgress(storage: StorageAdapter): Promise<Persist
 export async function safeSaveProgress(storage: StorageAdapter, state: ProgressState): Promise<string | null> {
   try {
     await storage.setItem(PROGRESS_STORAGE_KEY, encodeProgress(state));
+
     return null;
   } catch {
     return "La progression ne peut pas être enregistrée sur cet appareil.";

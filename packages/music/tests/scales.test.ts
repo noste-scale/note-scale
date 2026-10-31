@@ -40,7 +40,9 @@ describe("major-scale generation", () => {
       expect(new Set(scale.notes.slice(0, 7).map((note) => note[0])).size).toBe(7);
       const intervalSemitones = scale.notes.slice(0, -1).map((note, index) => {
         const nextNote = scale.notes[index + 1];
+
         if (!nextNote) throw new Error("missing note");
+
         return (pitchClassOf(nextNote) - pitchClassOf(note) + 12) % 12;
       });
       expect(intervalSemitones).toEqual(MAJOR_INTERVALS);

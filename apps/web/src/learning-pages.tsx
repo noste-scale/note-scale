@@ -11,7 +11,8 @@ export function Home() {
       <h1>Construis toutes les gammes majeures</h1>
       <p className="lead">Une seule formule. Des explications claires. Quelques minutes par jour.</p>
       <div className="formula" aria-label="Ton, ton, demi-ton, ton, ton, ton, demi-ton">
-        <span>T · T · ½</span><span><b aria-hidden="true">|</b> T · T · T · ½</span>
+        <span>T · T · ½</span>
+        <span><b aria-hidden="true">|</b> T · T · T · ½</span>
       </div>
       <div className="actions">
         <Link className="primary" to="/apprendre">Apprendre</Link>
@@ -44,8 +45,10 @@ function IntervalPattern() {
 
 function LessonBody({ lesson }: { lesson: Lesson }) {
   let exampleScale: UiScale | undefined;
+
   if (lesson.id === "c-major") exampleScale = getScale("C");
   else if (lesson.id === "d-major") exampleScale = getScale("D");
+
   return (
     <>
       {lesson.summary && <p className="notes">{lesson.summary}</p>}
@@ -75,9 +78,18 @@ export function Learn() {
     <Page title="Apprendre" intro="Comprends la règle avant de mémoriser.">
       <div className="stack">
         {LESSONS.map((lesson, index) => (
-          <details className="card lesson" key={lesson.id} open={index === 0}>
-            <summary><span>{index + 1}</span>{lesson.title.replace(/^\d+\.\s*/, "")}</summary>
-            <div><LessonBody lesson={lesson} /></div>
+          <details
+            className="card lesson"
+            key={lesson.id}
+            open={index === 0}
+          >
+            <summary>
+              <span>{index + 1}</span>
+              {lesson.title.replace(/^\d+\.\s*/, "")}
+            </summary>
+            <div>
+              <LessonBody lesson={lesson} />
+            </div>
           </details>
         ))}
       </div>

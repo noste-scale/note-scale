@@ -10,6 +10,7 @@ const pitchNames = ["C", "Cs", "D", "Ds", "E", "F", "Fs", "G", "Gs", "A", "As", 
 const noteFrequencies = [4, 5].flatMap((octave) =>
   pitchNames.map((pitchName, pitchClass) => {
     const midiNote = (octave + 1) * 12 + pitchClass;
+
     return [`${pitchName}${octave}`, 440 * 2 ** ((midiNote - 69) / 12)] as const;
   }),
 );
@@ -43,6 +44,7 @@ function synthesizeWav(frequencyHz: number): Buffer {
     const sample = Math.max(-1, Math.min(1, (fundamental + secondHarmonic + thirdHarmonic) * envelope * 0.55));
     wavBytes.writeInt16LE(Math.round(sample * 32_767), 44 + frameIndex * bytesPerSample);
   }
+
   return wavBytes;
 }
 

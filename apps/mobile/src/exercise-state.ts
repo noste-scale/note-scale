@@ -23,7 +23,9 @@ export function updateSelection(
   if (mode === "single") return [option];
   if (mode === "ordered") return current.length < maximum ? [...current, option] : current;
   if (option === exclusiveOption) return current.length === 1 && current[0] === option ? [] : [option];
+
   const withoutExclusive = exclusiveOption ? current.filter((item) => item !== exclusiveOption) : current;
+
   return withoutExclusive.includes(option)
     ? withoutExclusive.filter((item) => item !== option)
     : [...withoutExclusive, option];
@@ -52,7 +54,14 @@ export function attemptRecordingDecision(
   lastRecordedExerciseId: string | undefined,
   exerciseId: string,
   graded: boolean,
-): { record: boolean; lastRecordedExerciseId: string | undefined } {
+): {
+  record: boolean;
+  lastRecordedExerciseId: string | undefined
+} {
   const record = shouldRecordAttempt(lastRecordedExerciseId, exerciseId, graded);
-  return { record, lastRecordedExerciseId: record ? exerciseId : lastRecordedExerciseId };
+
+  return {
+    record,
+    lastRecordedExerciseId: record ? exerciseId : lastRecordedExerciseId
+  };
 }

@@ -19,6 +19,7 @@ describe("WebScaleAudio local sample lifecycle", () => {
     expect(sampleUrlForPitch(11, "/NoteScale/")).toBe("/NoteScale/audio/B4.wav");
     expect(sampleUrlForPitch(12, "/NoteScale/")).toBe("/NoteScale/audio/C5.wav");
     expect(sampleUrlForPitch(23, "/NoteScale/")).toBe("/NoteScale/audio/B5.wav");
+
     for (let pitch = 0; pitch < 24; pitch += 1) {
       const filename = sampleUrlForPitch(pitch, "/").replace("/audio/", "");
       expect(existsSync(new URL(`../public/audio/${filename}`, import.meta.url)), filename).toBe(true);
@@ -29,12 +30,17 @@ describe("WebScaleAudio local sample lifecycle", () => {
     const requestedPitches: number[] = [];
     const audioVoices: ReturnType<typeof createAudioVoice>[] = [];
     const onInactive = vi.fn<(reason: AudioInactiveReason) => void>();
-    const player = new WebScaleAudio((pitch) => {
-      requestedPitches.push(pitch);
-      const audioVoice = createAudioVoice();
-      audioVoices.push(audioVoice);
-      return audioVoice;
-    }, undefined, onInactive);
+    const player = new WebScaleAudio(
+      (pitch) => {
+        requestedPitches.push(pitch);
+        const audioVoice = createAudioVoice();
+        audioVoices.push(audioVoice);
+
+        return audioVoice;
+      },
+      undefined,
+      onInactive
+    );
     expect(player.play([0, 2], "up", "normal")).toBe(true);
     expect(requestedPitches).toEqual([0, 2]);
     expect(audioVoices[0]?.play).toHaveBeenCalledOnce();
@@ -54,6 +60,7 @@ describe("WebScaleAudio local sample lifecycle", () => {
     const requestedPitches: number[] = [];
     const player = new WebScaleAudio((pitch) => {
       requestedPitches.push(pitch);
+
       return createAudioVoice();
     });
     expect(player.play([9, 11, 1, 2], "up", "normal")).toBe(true);
@@ -140,6 +147,7 @@ describe("WebScaleAudio local sample lifecycle", () => {
 
   it("fails and releases a voice that never ends", () => {
     vi.useFakeTimers();
+
     try {
       const audioVoice = createAudioVoice();
       const onError = vi.fn();

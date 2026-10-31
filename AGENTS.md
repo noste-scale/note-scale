@@ -23,7 +23,7 @@
 
 ## Practical Clean Code
 
-Apply inherited global Clean Code and sentence-readability guidance.
+Apply inherited global Clean Code, sentence-readability and airy-formatting guidance.
 Use explicit domain names, verb-named cohesive functions and straightforward
 top-down flow. Prefer existing functions and ports over new layers, classes,
 dependencies or DI frameworks. Use named options for long internal argument lists.

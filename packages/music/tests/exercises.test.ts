@@ -14,6 +14,7 @@ import {
 
 function createSequenceRandom(values: readonly number[]) {
   let index = 0;
+
   return () => values[index++ % values.length] ?? 0;
 }
 
@@ -59,13 +60,21 @@ describe("exercise generation and grading", () => {
   it("grades ordered answers per position and rejects enharmonic substitutions", () => {
     const exercise = createExercise("build-scale", getMajorScale("F#"), () => 0);
     const correctGrade = gradeExercise(exercise, [...exercise.correctAnswer]);
-    expect(correctGrade).toMatchObject({ graded: true, correct: true, errors: [] });
+    expect(correctGrade).toMatchObject({
+      graded: true,
+      correct: true,
+      errors: []
+    });
 
     const enharmonicAnswer = [...exercise.correctAnswer];
     enharmonicAnswer[6] = "F";
     const incorrectGrade = gradeExercise(exercise, enharmonicAnswer);
     expect(incorrectGrade.correct).toBe(false);
-    expect(incorrectGrade.errors).toEqual([expect.objectContaining({ index: 6, expected: "E#", actual: "F" })]);
+    expect(incorrectGrade.errors).toEqual([expect.objectContaining({
+      index: 6,
+      expected: "E#",
+      actual: "F"
+    })]);
   });
 
   it("grades accidental sets without requiring order", () => {
@@ -97,7 +106,11 @@ describe("exercise generation and grading", () => {
     const now = new Date("2026-08-11T10:00:00.000Z");
     const progress = recordAttempt(
       createEmptyProgress(),
-      { exerciseType: "build-scale", scaleId: "Eb", correct: false },
+      {
+        exerciseType: "build-scale",
+        scaleId: "Eb",
+        correct: false
+      },
       new Date(now.getTime() - 20 * 60_000),
     );
     const session = createDailySession(progress, createSequenceRandom([0.8, 0.2, 0.6, 0.4, 0.1]), now);

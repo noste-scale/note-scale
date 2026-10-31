@@ -6,21 +6,28 @@ gradle.beforeProject { project ->
                 // ponytail: short per-checkout cache avoids Ninja's Windows 260-character ceiling.
                 def checkoutHash = Integer.toHexString(project.rootDir.absolutePath.hashCode())
                 android.externalNativeBuild.cmake.buildStagingDirectory = new File(project.gradle.gradleUserHomeDir, "cxx/${checkoutHash}")
+
                 def signingPropertiesFile = new File(project.rootDir, '../../../signing/android/release.properties').canonicalFile
+
                 if (!signingPropertiesFile.isFile()) {
                     throw new GradleException('Missing signing/android/release.properties. Restore the original signing backup; do not generate another key.')
                 }
+
                 def signingProperties = new Properties()
                 signingPropertiesFile.withInputStream { inputStream -> signingProperties.load(inputStream) }
+
                 ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].each { propertyName ->
                     if (!signingProperties.getProperty(propertyName)?.trim()) {
                         throw new GradleException("Missing signing property: ${propertyName}")
                     }
                 }
+
                 def keystoreFile = new File(signingPropertiesFile.parentFile, signingProperties.getProperty('storeFile')).canonicalFile
+
                 if (!keystoreFile.isFile()) {
                     throw new GradleException('Release keystore missing. Restore the original signing backup.')
                 }
+
                 def releaseSigningConfig = android.signingConfigs.maybeCreate('notescaleRelease')
                 releaseSigningConfig.storeFile = keystoreFile
                 releaseSigningConfig.storePassword = signingProperties.getProperty('storePassword')

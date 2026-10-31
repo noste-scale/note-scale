@@ -8,7 +8,13 @@ import {
   noteIdFor,
   pitchClassOf,
 } from "./notes";
-import { FLAT_ORDER, getScaleMetadata, isTonicId, SCALE_CATALOG, SHARP_ORDER } from "./scales";
+import {
+  FLAT_ORDER,
+  getScaleMetadata,
+  isTonicId,
+  SCALE_CATALOG,
+  SHARP_ORDER
+} from "./scales";
 import type {
   ConstructionStep,
   MajorScale,
@@ -32,12 +38,19 @@ const ENHARMONIC_SUGGESTIONS: Readonly<Record<string, TonicId>> = {
 
 function findAlteration(targetPitchClass: number, letter: NoteLetter): -1 | 0 | 1 | null {
   let pitchDifference = (targetPitchClass - NATURAL_PITCH_CLASSES[letter] + 12) % 12;
+
   if (pitchDifference > 6) pitchDifference -= 12;
-  return pitchDifference === -1 || pitchDifference === 0 || pitchDifference === 1 ? pitchDifference : null;
+
+  return pitchDifference === -1
+    || pitchDifference === 0
+    || pitchDifference === 1
+    ? pitchDifference
+    : null;
 }
 
 function createUnsupportedTonicResult(input: string, normalizedTonic: NoteId | null): ScaleGenerationResult {
   const suggestion = normalizedTonic ? ENHARMONIC_SUGGESTIONS[normalizedTonic] : undefined;
+
   return {
     ok: false,
     error: {
@@ -53,6 +66,7 @@ function createUnsupportedTonicResult(input: string, normalizedTonic: NoteId | n
 
 export function generateMajorScale(input: string): ScaleGenerationResult {
   const normalizedTonic = normalizeNoteId(input);
+
   if (!normalizedTonic || !isTonicId(normalizedTonic)) return createUnsupportedTonicResult(input, normalizedTonic);
 
   const tonic = normalizedTonic;
@@ -65,11 +79,16 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
       notes.push(tonic);
       continue;
     }
+
     const letter = NOTE_LETTERS[(tonicLetterIndex + index) % NOTE_LETTERS.length];
     const offset = MAJOR_OFFSETS[index];
+
     if (!letter || offset === undefined) return createUnsupportedTonicResult(input, normalizedTonic);
+
     const alteration = findAlteration((tonicPitchClass + offset) % 12, letter);
+
     if (alteration === null) return createUnsupportedTonicResult(input, normalizedTonic);
+
     notes.push(noteIdFor(letter, alteration));
   }
 
@@ -77,6 +96,7 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
   const signedAccidentalCount = metadata.signature;
   let accidentals: readonly NoteId[] = [];
   let accidentalType: MajorScale["accidentalType"] = "none";
+
   if (signedAccidentalCount > 0) {
     accidentals = SHARP_ORDER.slice(0, signedAccidentalCount);
     accidentalType = "sharp";
@@ -84,10 +104,13 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
     accidentals = FLAT_ORDER.slice(0, -signedAccidentalCount);
     accidentalType = "flat";
   }
+
   const construction: ConstructionStep[] = MAJOR_INTERVALS.map((semitones, index) => {
     const currentNote = notes[index];
     const nextNote = notes[index + 1];
+
     if (!currentNote || !nextNote) throw new Error("Generated scale is incomplete");
+
     const expectedLetter = nextNote[0] as NoteLetter;
     const alteration = accidentalOf(nextNote);
     const naturalCandidate = noteIdFor(expectedLetter, 0);
@@ -96,6 +119,7 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
       alteration === "natural"
         ? `${formatNote(naturalCandidate)} convient sans altération.`
         : `${formatNote(naturalCandidate)} devient ${formatNote(nextNote)} pour respecter la formule.`;
+
     return {
       index,
       currentNote,
@@ -127,7 +151,9 @@ export function generateMajorScale(input: string): ScaleGenerationResult {
 
 export function getMajorScale(tonic: TonicId): MajorScale {
   const result = generateMajorScale(tonic);
+
   if (!result.ok) throw new Error(result.error.message);
+
   return result.scale;
 }
 
@@ -135,6 +161,7 @@ export const MAJOR_SCALES: readonly MajorScale[] = SCALE_CATALOG.map(({ id }) =>
 
 export function getScaleById(id: string): MajorScale | undefined {
   const normalizedTonic = normalizeNoteId(id);
+
   return normalizedTonic && isTonicId(normalizedTonic) ? MAJOR_SCALES.find((scale) => scale.id === normalizedTonic) : undefined;
 }
 
@@ -144,7 +171,9 @@ export function scalePitchIds(scale: MajorScale, direction: "ascending" | "desce
     let pitch = pitchClassOf(note);
     while (pitch <= previousPitch) pitch += 12;
     previousPitch = pitch;
+
     return pitch;
   });
+
   return direction === "ascending" ? pitches : [...pitches].reverse();
 }

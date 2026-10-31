@@ -2,7 +2,11 @@ import { Body, Heading, Screen } from "../src/components";
 
 export default function PrivacyScreen() {
   return (
-    <Screen title="Politique de confidentialité" subtitle="NoteScale pour Android · Mise à jour : 18 octobre 2026" nativeHeader>
+    <Screen
+      title="Politique de confidentialité"
+      subtitle="NoteScale pour Android · Mise à jour : 18 octobre 2026"
+      nativeHeader
+    >
       <Body>NoteScale permet d’apprendre les gammes majeures sans compte. Les leçons, les exercices et les sons sont inclus dans l’application et fonctionnent hors ligne.</Body>
       <Heading>Données sur ton appareil</Heading>
       <Body>NoteScale enregistre les résultats et les dates de tes exercices, les gammes travaillées, les révisions prévues, la dernière leçon ouverte et ton choix de thème. Ces données servent uniquement à afficher ta progression, proposer tes révisions et reprendre ton apprentissage.</Body>

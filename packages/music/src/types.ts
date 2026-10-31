@@ -63,8 +63,14 @@ export interface UnsupportedTonicError {
 }
 
 export type ScaleGenerationResult =
-  | { ok: true; scale: MajorScale }
-  | { ok: false; error: UnsupportedTonicError };
+  | {
+    ok: true;
+    scale: MajorScale
+  }
+  | {
+    ok: false;
+    error: UnsupportedTonicError
+  };
 
 export type ExerciseType =
   | "complete-scale"

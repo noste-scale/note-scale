@@ -14,7 +14,14 @@ import {
   type SampleKey,
   type SequencedPitch,
 } from "./audio-model";
-import { Action, Body, Card, Heading, Notice, Row } from "./components";
+import {
+  Action,
+  Body,
+  Card,
+  Heading,
+  Notice,
+  Row
+} from "./components";
 import { Piano } from "./piano";
 
 interface ActivePlayback {
@@ -54,12 +61,14 @@ const samples: Record<SampleKey, number> = {
 
 function getNotePitchClass(note: string): number | undefined {
   const noteId = normalizeNoteId(note);
+
   return noteId ? pitchClassOf(noteId) : undefined;
 }
 
 function createPitchSequence(notes: readonly string[], direction: "up" | "down"): SequencedPitch[] {
   return orderedPitchSequence(notes.flatMap((note) => {
     const pitchClass = getNotePitchClass(note);
+
     return pitchClass === undefined ? [] : [pitchClass];
   }), direction);
 }
@@ -90,7 +99,10 @@ export function AudioControls({
   const [showSettings, setShowSettings] = useState(false);
   const [playbackPhase, setPlaybackPhase] = useState<PlaybackPhase>("stopped");
   const [soundingPitch, setSoundingPitch] = useState<number>();
-  const [playbackMessage, setPlaybackMessage] = useState<{ text: string; danger: boolean }>();
+  const [playbackMessage, setPlaybackMessage] = useState<{
+    text: string;
+    danger: boolean
+  }>();
   const configurationKey = playbackConfigurationKey(notes, direction, slow);
   const previousConfigurationKey = useRef(configurationKey);
 
@@ -102,6 +114,7 @@ export function AudioControls({
 
   const clearPlaybackTimer = () => {
     if (playbackTimer.current) clearTimeout(playbackTimer.current);
+
     playbackTimer.current = undefined;
   };
 
@@ -132,6 +145,7 @@ export function AudioControls({
 
   const completePlayback = (playbackToken: number) => {
     if (playbackToken !== playbackGeneration.current) return;
+
     clearPlaybackTimer();
     remainingNoteDurationMs.current = 0;
     setSoundingPitch(undefined);
@@ -142,14 +156,18 @@ export function AudioControls({
 
   const playNoteAtIndex = (noteIndex: number, playbackToken: number) => {
     if (playbackToken !== playbackGeneration.current) return;
+
     const sequencedPitch = pitchSequence.current[noteIndex];
     const sampleSource = sequencedPitch ? samples[sequencedPitch.sampleKey] : undefined;
+
     if (!sequencedPitch || sampleSource === undefined) {
       resetPlayer();
       updatePlaybackPhase("stop");
       setPlaybackMessage({ text: "Cette note ne peut pas être lue. Réessaie avec une autre gamme.", danger: true });
+
       return;
     }
+
     try {
       currentNoteIndex.current = noteIndex;
       player.replace(sampleSource);
@@ -172,12 +190,16 @@ export function AudioControls({
 
   const startSequence = (nextSequence: SequencedPitch[], restart: boolean) => {
     if (activePlayback?.playbackOwner !== playbackOwner.current) activePlayback?.preempt();
+
     resetPlayer();
+
     if (nextSequence.length === 0) {
       updatePlaybackPhase("stop");
       setPlaybackMessage({ text: "Aucune note lisible n’est disponible.", danger: true });
+
       return;
     }
+
     pitchSequence.current = nextSequence;
     activePlayback = { playbackOwner: playbackOwner.current, preempt: () => stopPlayback("preempt") };
     setPlaybackMessage(undefined);
@@ -191,15 +213,25 @@ export function AudioControls({
   const playSingleNote = (note: string) => {
     const pitchClass = getNotePitchClass(note);
     const sampleKey = pitchClass === undefined ? undefined : sampleKeyForPitch(pitchClass, 4);
+
     if (pitchClass === undefined || !sampleKey) {
       setPlaybackMessage({ text: "Cette note ne peut pas être lue.", danger: true });
+
       return;
     }
-    startSequence([{ pitchClass, octave: 4, sampleKey }], playbackPhaseRef.current !== "stopped");
+
+    startSequence([
+      {
+        pitchClass,
+        octave: 4,
+        sampleKey
+      }
+    ], playbackPhaseRef.current !== "stopped");
   };
 
   const pausePlayback = () => {
     if (playbackPhaseRef.current !== "playing") return;
+
     remainingNoteDurationMs.current = Math.max(0, noteDeadlineMs.current - Date.now());
     clearPlaybackTimer();
     player.pause();
@@ -209,6 +241,7 @@ export function AudioControls({
 
   const resumePlayback = () => {
     if (playbackPhaseRef.current !== "paused") return;
+
     try {
       player.play();
       updatePlaybackPhase("resume");
@@ -218,6 +251,7 @@ export function AudioControls({
       noteDeadlineMs.current = Date.now() + noteDurationMs;
       playbackTimer.current = setTimeout(() => {
         const noteIndex = currentNoteIndex.current;
+
         if (noteIndex + 1 < pitchSequence.current.length) playNoteAtIndex(noteIndex + 1, playbackToken);
         else completePlayback(playbackToken);
       }, noteDurationMs);
@@ -230,13 +264,16 @@ export function AudioControls({
   const configurePlayback = (nextDirection: "up" | "down", nextSlow: boolean) => {
     if (nextDirection === direction && nextSlow === slow) return;
     if (playbackPhaseRef.current === "playing" || playbackPhaseRef.current === "paused") stopPlayback();
+
     setDirection(nextDirection);
     setSlow(nextSlow);
   };
 
   useEffect(() => {
     if (previousConfigurationKey.current === configurationKey) return;
+
     previousConfigurationKey.current = configurationKey;
+
     if (playbackPhaseRef.current !== "stopped") {
       resetPlayer();
       updatePlaybackPhase("stop");
@@ -250,6 +287,7 @@ export function AudioControls({
   useEffect(() => {
     audioModeSetup ??= setAudioModeAsync({ playsInSilentMode: true });
     void audioModeSetup.catch(() => setPlaybackMessage({ text: "L’audio local est indisponible sur cet appareil.", danger: true }));
+
     return () => {
       playbackGeneration.current += 1;
       clearPlaybackTimer();
@@ -259,11 +297,17 @@ export function AudioControls({
   }, [player]);
 
   const isPlaybackActive = playbackPhase === "playing" || playbackPhase === "paused";
-  const mainAction = isPlaybackActive || playbackPhase === "completed" || playbackPhase === "preempted" ? "Recommencer" : "Lire";
+  const mainAction = isPlaybackActive
+    || playbackPhase === "completed"
+    || playbackPhase === "preempted"
+    ? "Recommencer"
+    : "Lire";
   const pauseAction = playbackPhase === "paused" ? "Reprendre" : "Pause";
   let handleMainAction = startPlayback;
+
   if (playbackPhase === "paused") handleMainAction = resumePlayback;
   else if (playbackPhase === "playing") handleMainAction = pausePlayback;
+
   const controls = (
     <Row>
       <Action
@@ -287,7 +331,9 @@ export function AudioControls({
     </Row>
   );
   const statusText = playbackStatus(playbackPhase, playbackMessage?.text);
-  const status = playbackMessage ? <Notice danger={playbackMessage.danger}>{statusText}</Notice> : <Body live>{statusText}</Body>;
+  const status = playbackMessage
+    ? <Notice danger={playbackMessage.danger}>{statusText}</Notice>
+    : <Body live>{statusText}</Body>;
 
   if (compact) {
     return (
@@ -304,7 +350,12 @@ export function AudioControls({
       <Body muted>Lecture locale, sans connexion.</Body>
       {controls}
       {status}
-      {piano && showPiano ? <Piano key={notes[0]} activeNotes={notes} soundingPitch={soundingPitch} onPlayNote={playSingleNote} /> : <>
+      {piano && showPiano ? <Piano
+        key={notes[0]}
+        activeNotes={notes}
+        soundingPitch={soundingPitch}
+        onPlayNote={playSingleNote}
+      /> : <>
         <Body>Écouter une note, depuis {notes[0]}</Body>
         <Row>
           {notes.slice(0, 7).map((note, index) => <Action
@@ -352,8 +403,20 @@ export function AudioControls({
         <Body>Vitesse de lecture</Body>
         <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture">
           <Row>
-            <Action role="radio" label="Normale" onPress={() => configurePlayback(direction, false)} selected={!slow} secondary />
-            <Action role="radio" label="Lente" onPress={() => configurePlayback(direction, true)} selected={slow} secondary />
+            <Action
+              role="radio"
+              label="Normale"
+              onPress={() => configurePlayback(direction, false)}
+              selected={!slow}
+              secondary
+            />
+            <Action
+              role="radio"
+              label="Lente"
+              onPress={() => configurePlayback(direction, true)}
+              selected={slow}
+              secondary
+            />
           </Row>
         </View>
       </> : null}

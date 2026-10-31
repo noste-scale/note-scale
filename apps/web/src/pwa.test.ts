@@ -6,7 +6,11 @@ import { offlineWorkerSource, pagesBase, prepareOfflineRegistration, watchWorker
 type WorkerHandler = (event: any) => void;
 
 function createResponse(name: string) {
-  return { name, ok: true, clone: vi.fn(() => ({ name: `${name}-clone`, ok: true })) };
+  return {
+    name,
+    ok: true,
+    clone: vi.fn(() => ({ name: `${name}-clone`, ok: true }))
+  };
 }
 
 function executeServiceWorker() {
@@ -21,13 +25,18 @@ function executeServiceWorker() {
   const claim = vi.fn(async () => undefined);
   const skipWaiting = vi.fn(async () => undefined);
   const caches = {
-    open: vi.fn(async () => ({ addAll, match, put })),
+    open: vi.fn(async () => ({
+      addAll,
+      match,
+      put
+    })),
     match: vi.fn(async () => {
       throw new Error("global cache lookup must not be used");
     }),
     keys: vi.fn(async () => ["notescale-v1", "notescale-build123", "notescale-v3", "other-app-v1"]),
     delete: vi.fn(async (key: string) => {
       deleted.push(key);
+
       return true;
     }),
   };
@@ -46,8 +55,27 @@ function executeServiceWorker() {
     "/NoteScale/",
     "notescale-build123",
   );
-  runInNewContext(source, { self, caches, fetch: network, location: { origin: "https://example.test" }, URL, Promise });
-  return { handlers, entries, put, addAll, match, deleted, claim, skipWaiting, caches, network };
+  runInNewContext(source, {
+    self,
+    caches,
+    fetch: network,
+    location: { origin: "https://example.test" },
+    URL,
+    Promise
+  });
+
+  return {
+    handlers,
+    entries,
+    put,
+    addAll,
+    match,
+    deleted,
+    claim,
+    skipWaiting,
+    caches,
+    network
+  };
 }
 
 async function dispatchLifetime(handler: WorkerHandler): Promise<void> {
@@ -60,11 +88,19 @@ async function dispatchLifetime(handler: WorkerHandler): Promise<void> {
   await lifetime;
 }
 
-function dispatchFetch(handler: WorkerHandler, url: string, mode: RequestMode = "cors") {
+function dispatchFetch(
+  handler: WorkerHandler,
+  url: string,
+  mode: RequestMode = "cors"
+) {
   let responsePromise: Promise<ReturnType<typeof createResponse>> | undefined;
   const lifetimes: Promise<unknown>[] = [];
   handler({
-    request: { method: "GET", url, mode },
+    request: {
+      method: "GET",
+      url,
+      mode
+    },
     respondWith: (promise: Promise<ReturnType<typeof createResponse>>) => {
       responsePromise = promise;
     },
@@ -72,7 +108,9 @@ function dispatchFetch(handler: WorkerHandler, url: string, mode: RequestMode = 
       lifetimes.push(promise);
     },
   });
+
   if (!responsePromise) throw new Error("Worker did not respond to GET");
+
   return { response: responsePromise, lifetimes };
 }
 

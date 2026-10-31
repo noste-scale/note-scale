@@ -61,7 +61,9 @@ export function createRegularExercise({
   now = new Date(),
 }: RegularExerciseOptions): ExerciseSelection | undefined {
   const preferredMajorScale = preferredScale ? majorScaleById.get(preferredScale.id) : undefined;
+
   if (preferredScale && !preferredMajorScale) return undefined;
+
   const selection = createWebTrainingExercise({
     exerciseTypeIndex,
     previousSelection,
@@ -70,13 +72,17 @@ export function createRegularExercise({
     progress,
     now,
   });
+
   if (!selection) return undefined;
+
   const scale = preferredScale ?? getScale(selection.scale.id);
+
   return scale ? { scale, exercise: selection.exercise } : undefined;
 }
 
 export function parseExerciseAnswer(exercise: Exercise, answer: string): string[] {
   if (exercise.options) return [answer];
+
   return answer
     .split(/\s*(?:,|–|—|-)\s*|\s+/u)
     .filter((answerPart) => answerPart && answerPart.toLocaleLowerCase("fr") !== "et");
@@ -93,21 +99,33 @@ export function submitExerciseAnswer(
   recordAttempt: (attempt: RecordedExercise) => void,
 ): GradeResult {
   const gradeResult = gradeExercise(exercise, parseExerciseAnswer(exercise, answer));
+
   if (gradeResult.graded && !hasRecordedAttempt) {
-    recordAttempt({ scaleId: exercise.scaleId, correct: gradeResult.correct, exerciseType: exercise.type });
+    recordAttempt({
+      scaleId: exercise.scaleId,
+      correct: gradeResult.correct,
+      exerciseType: exercise.type
+    });
   }
+
   return gradeResult;
 }
 
 export function filterScales(query: string): UiScale[] {
   const normalizedQuery = query.trim().toLocaleLowerCase("fr");
+
   return scales.filter((scale) => `${scale.frenchName} ${scale.internationalName}`.toLocaleLowerCase("fr").includes(normalizedQuery));
 }
 
-export function requestedScale(value: string | null): { scale?: UiScale; error?: string } {
+export function requestedScale(value: string | null): {
+  scale?: UiScale;
+  error?: string
+} {
   if (value === null) return {};
   if (value === "") return { error: "Le paramètre de gamme est vide." };
+
   const scale = getScale(value);
+
   return scale
     ? { scale }
     : { error: `La gamme « ${value} » n’est pas prise en charge.` };
@@ -123,17 +141,24 @@ export function safeRouteScaleId(value: string): string | null {
 
 export function focusMainContent(root: { getElementById(id: string): { focus(): void } | null }): boolean {
   const mainContent = root.getElementById("contenu");
+
   if (!mainContent) return false;
+
   mainContent.focus();
+
   return true;
 }
 
 export function constructionDetails(scaleId: string, completedIntervalCount: number): ConstructionDetails | undefined {
   const construction = majorScaleById.get(scaleId)?.construction[completedIntervalCount - 1];
+
   if (!construction) return undefined;
+
   let requiredAccidental = "aucune";
+
   if (construction.alteration === "sharp") requiredAccidental = "dièse";
   else if (construction.alteration === "flat") requiredAccidental = "bémol";
+
   return {
     currentNote: formatNote(construction.currentNote),
     interval: construction.interval,

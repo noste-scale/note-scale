@@ -1,18 +1,32 @@
 function normalizeConfiguredBase(value: string | undefined): string | undefined {
   const basePath = value?.trim();
+
   if (!basePath) return undefined;
   if (basePath === "/") return "/";
+
   return `/${basePath.replace(/^\/+|\/+$/g, "")}/`;
 }
 
-export function pagesBase(repository: string | undefined, actions: string | undefined, explicit: string | undefined = undefined): string {
+export function pagesBase(
+  repository: string | undefined,
+  actions: string | undefined,
+  explicit: string | undefined = undefined
+): string {
   const configuredPath = normalizeConfiguredBase(explicit);
+
   if (configuredPath) return configuredPath;
+
   const repositoryName = repository?.split("/")[1];
+
   return actions && repositoryName && !repositoryName.endsWith(".github.io") ? `/${repositoryName}/` : "/";
 }
 
-export function offlineWorkerSource(template: string, assets: readonly string[], base: string, cacheId: string): string {
+export function offlineWorkerSource(
+  template: string,
+  assets: readonly string[],
+  base: string,
+  cacheId: string
+): string {
   return template
     .replace("__PRECACHE__", JSON.stringify(assets))
     .replace("__BASE__", JSON.stringify(base))
@@ -22,6 +36,7 @@ export function offlineWorkerSource(template: string, assets: readonly string[],
 export function watchWorkerFailures(registration: ServiceWorkerRegistration, onFailure: () => void): void {
   const watchWorker = (worker: ServiceWorker | null) => {
     if (!worker) return;
+
     let hasReportedFailure = false;
     const reportFailure = () => {
       if (!hasReportedFailure && worker.state === "redundant") {
@@ -44,10 +59,12 @@ export function prepareOfflineRegistration(
   onFailure: () => void,
 ): boolean {
   if (!production || !serviceWorker) return false;
+
   host.addEventListener("load", () => {
     void serviceWorker.register(`${base}sw.js`)
       .then((registration) => watchWorkerFailures(registration, onFailure))
       .catch(onFailure);
   });
+
   return true;
 }

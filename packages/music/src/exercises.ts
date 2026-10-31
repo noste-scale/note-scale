@@ -23,21 +23,32 @@ const TYPES: readonly ExerciseType[] = [
 
 function chooseRandomIndex(length: number, rng: RandomSource): number {
   if (length <= 0) return 0;
+
   const randomValue = rng();
-  const boundedRandomValue = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 0.999999999999) : 0;
+  const boundedRandomValue = Number.isFinite(randomValue)
+    ? Math.min(Math.max(randomValue, 0), 0.999999999999)
+    : 0;
+
   return Math.floor(boundedRandomValue * length);
 }
 
-function createExerciseId(type: ExerciseType, scale: string, rng: RandomSource): string {
+function createExerciseId(
+  type: ExerciseType,
+  scale: string,
+  rng: RandomSource
+): string {
   return `${type}-${scale}-${Math.floor(Math.max(0, rng()) * 1_000_000)}`;
 }
 
 function createCompleteScaleExercise(scale: MajorScale, rng: RandomSource): Exercise {
   const firstGapIndex = 1 + chooseRandomIndex(3, rng);
   let secondGapIndex = 4 + chooseRandomIndex(3, rng);
+
   if (secondGapIndex === firstGapIndex) secondGapIndex = Math.min(6, secondGapIndex + 1);
+
   const gapIndexes = [firstGapIndex, secondGapIndex].sort((left, right) => left - right);
   const promptNotes = scale.notes.map((note, index) => (gapIndexes.includes(index) ? "___" : formatNote(note)));
+
   return {
     id: createExerciseId("complete-scale", scale.id, rng),
     type: "complete-scale",
@@ -64,8 +75,10 @@ function createBuildScaleExercise(scale: MajorScale, rng: RandomSource): Exercis
 
 function createFindAccidentalsExercise(scale: MajorScale, rng: RandomSource): Exercise {
   let accidentalLabel = "altérations";
+
   if (scale.accidentalType === "flat") accidentalLabel = "bémols";
   else if (scale.accidentalType === "sharp") accidentalLabel = "dièses";
+
   return {
     id: createExerciseId("find-accidentals", scale.id, rng),
     type: "find-accidentals",
@@ -81,14 +94,31 @@ function createFindAccidentalsExercise(scale: MajorScale, rng: RandomSource): Ex
 }
 
 const INTERVAL_QUESTIONS = [
-  { notes: ["E", "F"], answer: "demi-ton", explanation: "Mi et Fa sont collés." },
-  { notes: ["B", "C"], answer: "demi-ton", explanation: "Si et Do sont collés." },
-  { notes: ["C", "D"], answer: "ton", explanation: "Do à Ré couvre deux demi-tons." },
-  { notes: ["D", "E"], answer: "ton", explanation: "Ré à Mi couvre deux demi-tons." },
+  {
+    notes: ["E", "F"],
+    answer: "demi-ton",
+    explanation: "Mi et Fa sont collés."
+  },
+  {
+    notes: ["B", "C"],
+    answer: "demi-ton",
+    explanation: "Si et Do sont collés."
+  },
+  {
+    notes: ["C", "D"],
+    answer: "ton",
+    explanation: "Do à Ré couvre deux demi-tons."
+  },
+  {
+    notes: ["D", "E"],
+    answer: "ton",
+    explanation: "Ré à Mi couvre deux demi-tons."
+  },
 ] as const;
 
 function createIdentifyIntervalExercise(rng: RandomSource): Exercise {
   const intervalQuestion = INTERVAL_QUESTIONS[chooseRandomIndex(INTERVAL_QUESTIONS.length, rng)] ?? INTERVAL_QUESTIONS[0];
+
   return {
     id: createExerciseId("identify-interval", intervalQuestion.notes.join(""), rng),
     type: "identify-interval",
@@ -114,6 +144,7 @@ function createFindErrorExercise(scale: MajorScale, rng: RandomSource): Exercise
   const incorrectNote = (noteHasAccidental ? noteToCorrect.note[0] ?? "C" : `${noteToCorrect.note}#`) as NoteId;
   const promptNotes = [...scale.notes];
   promptNotes[noteToCorrect.index] = incorrectNote;
+
   return {
     id: createExerciseId("find-error", scale.id, rng),
     type: "find-error",
@@ -126,7 +157,11 @@ function createFindErrorExercise(scale: MajorScale, rng: RandomSource): Exercise
   };
 }
 
-export function createExercise(type: ExerciseType, scale: MajorScale, rng: RandomSource = Math.random): Exercise {
+export function createExercise(
+  type: ExerciseType,
+  scale: MajorScale,
+  rng: RandomSource = Math.random
+): Exercise {
   switch (type) {
     case "complete-scale":
       return createCompleteScaleExercise(scale, rng);
@@ -141,27 +176,40 @@ export function createExercise(type: ExerciseType, scale: MajorScale, rng: Rando
   }
 }
 
-export function generateExercise(rng: RandomSource = Math.random, type?: ExerciseType, scale?: MajorScale): Exercise {
+export function generateExercise(
+  rng: RandomSource = Math.random,
+  type?: ExerciseType,
+  scale?: MajorScale
+): Exercise {
   const selectedType = type ?? TYPES[chooseRandomIndex(TYPES.length, rng)] ?? "complete-scale";
   const selectedScale = scale ?? MAJOR_SCALES[chooseRandomIndex(MAJOR_SCALES.length, rng)] ?? MAJOR_SCALES[0];
+
   if (!selectedScale) throw new Error("No major scales are available");
+
   return createExercise(selectedType, selectedScale, rng);
 }
 
 function normalizeAnswer(value: unknown): string | null {
   if (typeof value !== "string") return null;
+
   const trimmedAnswer = value.trim();
+
   if (!trimmedAnswer) return null;
+
   const noteId = normalizeNoteId(trimmedAnswer);
+
   return noteId ?? trimmedAnswer.toLocaleLowerCase("fr");
 }
 
 export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult {
   let answerItems: unknown[] = [];
+
   if (Array.isArray(answer)) answerItems = answer;
   else if (typeof answer === "string") answerItems = [answer];
+
   const normalizedAnswer = answerItems.map(normalizeAnswer);
   const hasInvalidAnswer = normalizedAnswer.length === 0 || normalizedAnswer.some((item) => item === null);
+
   if (hasInvalidAnswer) {
     return {
       graded: false,
@@ -182,18 +230,32 @@ export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult 
   if (answerOrderDoesNotMatter) {
     const submittedAccidentals = new Set(actualAnswer);
     const expectedAccidentals = new Set(expectedAnswer);
+
     for (const expectedAccidental of expectedAccidentals) {
-      if (!submittedAccidentals.has(expectedAccidental)) errors.push({ expected: expectedAccidental, message: `${formatNote(expectedAccidental)} manque.` });
+      if (!submittedAccidentals.has(expectedAccidental))
+        errors.push({
+          expected: expectedAccidental,
+          message: `${formatNote(expectedAccidental)} manque.`
+        });
     }
+
     for (const submittedAccidental of submittedAccidentals) {
-      if (!expectedAccidentals.has(submittedAccidental)) errors.push({ actual: submittedAccidental, message: `${formatNote(submittedAccidental)} n’appartient pas à l’armure.` });
+      if (!expectedAccidentals.has(submittedAccidental))
+        errors.push({
+          actual: submittedAccidental,
+          message: `${formatNote(submittedAccidental)} n’appartient pas à l’armure.`
+        });
     }
-    if (actualAnswer.length !== submittedAccidentals.size) errors.push({ message: "Une altération a été répétée." });
+
+    if (actualAnswer.length !== submittedAccidentals.size)
+      errors.push({ message: "Une altération a été répétée." });
   } else {
     const answerLength = Math.max(actualAnswer.length, expectedAnswer.length);
+
     for (let index = 0; index < answerLength; index += 1) {
       const expectedItem = expectedAnswer[index];
       const actualItem = actualAnswer[index];
+
       if (actualItem !== expectedItem) {
         errors.push({
           index,
@@ -223,6 +285,7 @@ export function createDailySession(
   const scales = selectReviewScales(progress, 3, rng, now);
   const naturalSemitoneQuestion = createIdentifyIntervalExercise(() => (rng() < 0.5 ? 0 : 0.25));
   const scaleTypes: readonly ExerciseType[] = ["complete-scale", "build-scale", "find-accidentals"];
+
   return {
     id: `daily-${localDateKey(now)}`,
     formulaReminder: "T – T – ½ | T – T – T – ½",

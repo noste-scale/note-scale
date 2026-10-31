@@ -3,33 +3,47 @@ import { pianoLabels } from "./app-model";
 import { WebScaleAudio, type AudioDirection, type AudioSpeed } from "./audio";
 import type { UiNote, UiScale } from "./domain";
 
-export function AudioPlayer({ notes, label, compact = false }: { notes: UiNote[]; label: string; compact?: boolean }) {
+export function AudioPlayer({ notes, label, compact = false }: {
+  notes: UiNote[];
+  label: string;
+  compact?: boolean
+}) {
   const [direction, setDirection] = useState<AudioDirection>("up");
   const [speed, setSpeed] = useState<AudioSpeed>("normal");
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
   const [error, setError] = useState("");
   const audioPlayer = useRef<WebScaleAudio | undefined>(undefined);
+
   if (!audioPlayer.current) {
-    audioPlayer.current = new WebScaleAudio(undefined, () => {
-      setIsPlaybackActive(false);
-      setError("La lecture audio a échoué. Réessaie ou utilise les autres activités.");
-    }, () => setIsPlaybackActive(false));
+    audioPlayer.current = new WebScaleAudio(
+      undefined,
+      () => {
+        setIsPlaybackActive(false);
+        setError("La lecture audio a échoué. Réessaie ou utilise les autres activités.");
+      },
+      () => setIsPlaybackActive(false)
+    );
   }
+
   const stopPlayback = useCallback(() => {
     audioPlayer.current?.stop();
     setIsPlaybackActive(false);
   }, []);
   const notesKey = notes.map((note) => note.id).join("|");
+
   useEffect(() => () => audioPlayer.current?.stop(), []);
+
   useEffect(() => {
     stopPlayback();
   }, [direction, notesKey, speed, stopPlayback]);
+
   function playScale() {
     const playablePitches = notes.map((note) => note.pitch).filter((pitch) => pitch >= 0);
     const hasStartedPlayback = audioPlayer.current?.play(playablePitches, direction, speed) ?? false;
     setIsPlaybackActive(hasStartedPlayback);
     setError(hasStartedPlayback ? "" : "Audio indisponible sur ce navigateur.");
   }
+
   if (compact) {
     return (
       <>
@@ -38,6 +52,7 @@ export function AudioPlayer({ notes, label, compact = false }: { notes: UiNote[]
       </>
     );
   }
+
   return (
     <section className="card audio">
       <h2>Écouter</h2>
@@ -73,18 +88,25 @@ export function Piano({ notes }: { notes: UiNote[] }) {
   const highlightedPitches = new Set(notes.map((note) => note.pitch));
   const [error, setError] = useState("");
   const audioPlayer = useRef<WebScaleAudio | undefined>(undefined);
+
   if (!audioPlayer.current) {
     audioPlayer.current = new WebScaleAudio(undefined, () => setError("Le son du piano n’a pas pu être lu."));
   }
+
   useEffect(() => () => audioPlayer.current?.stop(), []);
   const labels = pianoLabels(notes);
   const playNote = (pitch: number) => {
     const hasStartedPlayback = audioPlayer.current?.play([pitch], "up", "normal") ?? false;
     setError(hasStartedPlayback ? "" : "Piano audio indisponible sur ce navigateur.");
   };
+
   return (
     <>
-      <div className="piano" role="group" aria-label={notes.length ? `Clavier montrant ${notes.map((note) => note.label).join(", ")}` : "Clavier de piano interactif"}>
+      <div
+        className="piano"
+        role="group"
+        aria-label={notes.length ? `Clavier montrant ${notes.map((note) => note.label).join(", ")}` : "Clavier de piano interactif"}
+      >
         {labels.map((label, pitch) => (
           <button
             type="button"
@@ -112,5 +134,6 @@ export function NoteRow({ notes }: { notes: UiNote[] }) {
 
 export function describeKeySignature(scale: UiScale) {
   if (!scale.keySignatureCount) return "Sans altération";
+
   return `${scale.keySignatureCount} altération${scale.keySignatureCount > 1 ? "s" : ""} : ${scale.accidentals.join(", ")}`;
 }
