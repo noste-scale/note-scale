@@ -32,16 +32,16 @@ function ExerciseWorkspace({ requested }: { requested: UiScale | undefined }) {
   const [exerciseSelection, setExerciseSelection] = useState<ExerciseSelection>();
   useEffect(() => {
     if (isProgressReady && !exerciseSelection) {
-      setExerciseSelection(createRegularExercise(exerciseTypeIndex, undefined, requested, Math.random, progress));
+      setExerciseSelection(createRegularExercise({ exerciseTypeIndex, preferredScale: requested, progress }));
     }
   }, [progress, isProgressReady, requested, exerciseSelection, exerciseTypeIndex]);
   const generateNextExercise = (selectedTypeIndex: number) => {
-    const nextSelection = createRegularExercise(selectedTypeIndex, exerciseSelection, requested, Math.random, progress);
+    const nextSelection = createRegularExercise({ exerciseTypeIndex: selectedTypeIndex, previousSelection: exerciseSelection, preferredScale: requested, progress });
     setExerciseSelection(nextSelection);
     setExerciseTypeIndex(nextSelection ? Math.max(0, EXERCISE_TYPES.indexOf(nextSelection.exercise.type)) : selectedTypeIndex);
   };
   const generateAnotherExercise = () => {
-    const nextSelection = createRegularExercise(exerciseTypeIndex, exerciseSelection, requested, Math.random, progress);
+    const nextSelection = createRegularExercise({ exerciseTypeIndex, previousSelection: exerciseSelection, preferredScale: requested, progress });
     setExerciseSelection(nextSelection);
     if (nextSelection) setExerciseTypeIndex(Math.max(0, EXERCISE_TYPES.indexOf(nextSelection.exercise.type)));
   };

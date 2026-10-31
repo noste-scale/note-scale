@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { StorageAdapter } from "@notescale/music";
 import { createContext, type PropsWithChildren, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useColorScheme } from "react-native";
 import { createSerializedSaver } from "./progress-state";
@@ -36,23 +36,26 @@ export type Theme = typeof light | typeof dark;
 interface ThemeContextValue { theme: Theme; preference: ThemePreference; cyclePreference: () => void }
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-export function ThemeProvider({ children }: PropsWithChildren) {
+export function ThemeProvider({ children, storage: suppliedStorage }: PropsWithChildren<{ storage: StorageAdapter }>) {
+  const storage = useRef(suppliedStorage).current;
   const systemColorScheme = useColorScheme();
   const [preference, setPreference] = useState<ThemePreference>("system");
   const preferenceRef = useRef<ThemePreference>("system");
   const preferenceRevision = useRef(0);
   const savePreference = useRef(createSerializedSaver(
-    (value: ThemePreference) => AsyncStorage.setItem("notescale.theme", value),
+    async (value: ThemePreference) => storage.setItem("notescale.theme", value),
   )).current;
   useEffect(() => {
+    let isEffectActive = true;
     const loadRevision = preferenceRevision.current;
-    AsyncStorage.getItem("notescale.theme").then((storedPreference) => {
-      if (shouldApplyStoredPreference(loadRevision, preferenceRevision.current) && (storedPreference === "system" || storedPreference === "light" || storedPreference === "dark")) {
+    Promise.resolve().then(() => storage.getItem("notescale.theme")).then((storedPreference) => {
+      if (isEffectActive && shouldApplyStoredPreference(loadRevision, preferenceRevision.current) && (storedPreference === "system" || storedPreference === "light" || storedPreference === "dark")) {
         preferenceRef.current = storedPreference;
         setPreference(storedPreference);
       }
     }).catch(() => undefined);
-  }, []);
+    return () => { isEffectActive = false; };
+  }, [storage]);
   const cyclePreference = () => {
     preferenceRevision.current += 1;
     const nextPreference = nextThemePreference(preferenceRef.current);

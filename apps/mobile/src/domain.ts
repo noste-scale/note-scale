@@ -3,17 +3,17 @@ import {
   createDailySession,
   formatNote,
   gradeExercise,
-  isScaleDue,
+  createMobileTrainingExercise,
+  selectMobileTrainingScale,
   LESSONS,
   localDateKey,
   MAJOR_SCALES,
-  recentScaleAttempts,
-  selectReviewScales,
   type Exercise,
   type ExerciseType,
   type GradeResult,
   type MajorScale,
   type ProgressState,
+  type RandomSource,
 } from "@notescale/music";
 import { selectionPayload, type ExerciseSelectionMode } from "./exercise-state";
 
@@ -96,8 +96,6 @@ export interface ExerciseView {
   optionPayloads: Record<string, readonly string[]>;
 }
 
-const exerciseKinds: ExerciseKind[] = ["complete-scale", "build-scale", "find-accidentals", "identify-interval", "find-error"];
-
 function chooseRandomIndex(candidateCount: number, rng: () => number): number {
   const randomValue = rng();
   const boundedRandomValue = Number.isFinite(randomValue)
@@ -126,39 +124,21 @@ function formatAnswerLabels(type: ExerciseKind, answers: readonly string[]): str
 
 const formatExerciseAnswer = (exercise: Exercise): string => formatAnswerLabels(exercise.type, exercise.correctAnswer);
 
-export function selectExerciseScale(
-  generation: number,
-  preferredScaleId?: string,
-  progress?: ProgressState,
-  rng: () => number = Math.random,
-  now = new Date(),
-): MajorScale | undefined {
-  const preferredScale = MAJOR_SCALES.find((scaleOption) => scaleOption.id === preferredScaleId);
-  if (preferredScale) return preferredScale;
-  if (!progress) return MAJOR_SCALES[chooseRandomIndex(MAJOR_SCALES.length, rng)];
-
-  const rankedScales = selectReviewScales(progress, MAJOR_SCALES.length, rng, now);
-  const weightedScales = rankedScales.flatMap((scale) => {
-    const recentErrorCount = recentScaleAttempts(progress, scale.id, 6).filter((attempt) => !attempt.correct).length;
-    const weight = 1 + recentErrorCount + (isScaleDue(progress, scale.id, now) ? 3 : 0);
-    return Array.from({ length: weight }, () => scale);
-  });
-  const rotatedScaleIndex = Number.isFinite(generation) ? Math.abs(Math.trunc(generation)) : 0;
-  return weightedScales[rotatedScaleIndex % weightedScales.length] ?? rankedScales[0];
+interface ExerciseOptions {
+  generation: number;
+  preferredScaleId?: string | undefined;
+  progress?: ProgressState | undefined;
+  rng?: RandomSource;
+  now?: Date;
 }
 
-export function makeExercise(
-  generation: number,
-  preferredScaleId?: string,
-  rng: () => number = Math.random,
-  progress?: ProgressState,
-  now = new Date(),
-): ExerciseView | undefined {
-  const scale = selectExerciseScale(generation, preferredScaleId, progress, rng, now);
-  if (!scale) return undefined;
-  const kind = exerciseKinds[chooseRandomIndex(exerciseKinds.length, rng)] ?? "complete-scale";
-  const exercise = createExercise(kind, scale, rng);
-  return createExerciseView(exercise, scale, rng);
+export function selectExerciseScale({ rng = Math.random, now = new Date(), ...options }: ExerciseOptions): MajorScale | undefined {
+  return selectMobileTrainingScale({ ...options, rng, now });
+}
+
+export function makeExercise({ rng = Math.random, now = new Date(), ...options }: ExerciseOptions): ExerciseView | undefined {
+  const selection = createMobileTrainingExercise({ ...options, rng, now });
+  return selection ? createExerciseView(selection.exercise, selection.scale, rng) : undefined;
 }
 
 function shuffleValues<T>(values: readonly T[], rng: () => number): T[] {

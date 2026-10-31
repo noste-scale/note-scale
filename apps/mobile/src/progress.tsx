@@ -1,12 +1,13 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createEmptyProgress,
   isTonicId,
+  LESSONS,
   recordAttempt as applyAttempt,
   safeLoadProgress,
   safeSaveProgress,
   type ExerciseType,
   type ProgressState,
+  type StorageAdapter,
 } from "@notescale/music";
 import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -18,7 +19,6 @@ import {
   withTimeout,
   type PendingAttempt,
 } from "./progress-state";
-import { lessons } from "./domain";
 
 interface ProgressContextValue {
   progress: ProgressState;
@@ -32,12 +32,9 @@ interface ProgressContextValue {
 }
 
 const ProgressContext = createContext<ProgressContextValue | undefined>(undefined);
-const storage = {
-  getItem: (key: string) => AsyncStorage.getItem(key),
-  setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
-};
 
-export function ProgressProvider({ children }: PropsWithChildren) {
+export function ProgressProvider({ children, storage: suppliedStorage }: PropsWithChildren<{ storage: StorageAdapter }>) {
+  const storage = useRef(suppliedStorage).current;
   const [progress, setProgress] = useState<ProgressState>(() => createEmptyProgress());
   const [hydrated, setHydrated] = useState(false);
   const [warning, setWarning] = useState<string>();
@@ -56,7 +53,7 @@ export function ProgressProvider({ children }: PropsWithChildren) {
   )).current;
   // ponytail: a bookmark, not lesson completion; exercise progress stays untouched.
   const saveLessonBookmark = useRef(createSerializedSaver(
-    (id: string) => AsyncStorage.setItem("notescale.lesson.v1", id),
+    async (id: string) => storage.setItem("notescale.lesson.v1", id),
     STORAGE_OPERATION_TIMEOUT_MS,
   )).current;
 
@@ -89,16 +86,16 @@ export function ProgressProvider({ children }: PropsWithChildren) {
       isEffectActive = false;
       mountedRef.current = false;
     };
-  }, [persistProgress]);
+  }, [persistProgress, storage]);
 
   useEffect(() => {
     let isEffectActive = true;
     const bookmarkRevision = lessonBookmarkRevision.current;
-    void withTimeout(AsyncStorage.getItem("notescale.lesson.v1"), STORAGE_OPERATION_TIMEOUT_MS).then((storedLessonId) => {
+    void withTimeout(Promise.resolve().then(() => storage.getItem("notescale.lesson.v1")), STORAGE_OPERATION_TIMEOUT_MS).then((storedLessonId) => {
       if (!isEffectActive) return;
       if (bookmarkRevision !== lessonBookmarkRevision.current) return;
       if (!storedLessonId) return;
-      if (!lessons.some((lesson) => lesson.id === storedLessonId)) return;
+      if (!LESSONS.some((lesson) => lesson.id === storedLessonId)) return;
       setLastLessonId(storedLessonId);
     }).catch(() => {
       if (isEffectActive && bookmarkRevision === lessonBookmarkRevision.current) setLessonWarning("La dernière leçon n’a pas pu être retrouvée. Tu peux toujours choisir une leçon.");
@@ -108,10 +105,10 @@ export function ProgressProvider({ children }: PropsWithChildren) {
     return () => {
       isEffectActive = false;
     };
-  }, []);
+  }, [storage]);
 
   const rememberLesson = useCallback((id: string) => {
-    if (!lessons.some((lesson) => lesson.id === id)) return;
+    if (!LESSONS.some((lesson) => lesson.id === id)) return;
     const bookmarkRevision = ++lessonBookmarkRevision.current;
     setLastLessonId(id);
     void saveLessonBookmark(id).then(() => {

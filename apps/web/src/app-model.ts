@@ -1,31 +1,24 @@
 import {
-  createExercise,
+  createWebTrainingExercise,
+  chooseTrainingTypeIndex,
+  TRAINING_EXERCISE_TYPES,
   formatNote,
   gradeExercise,
   MAJOR_SCALES,
   createEmptyProgress,
-  selectReviewScales,
   type Exercise,
   type ExerciseType,
   type GradeResult,
   type MajorScale,
   type ProgressState,
-  type TonicId,
+  type RandomSource,
 } from "@notescale/music";
 import { getScale, scales, type UiNote, type UiScale } from "./domain";
 
-export const EXERCISE_TYPES: readonly ExerciseType[] = [
-  "complete-scale",
-  "build-scale",
-  "find-accidentals",
-  "identify-interval",
-  "find-error",
-];
+export const EXERCISE_TYPES = TRAINING_EXERCISE_TYPES;
 
-export function randomExerciseTypeIndex(rng: () => number = Math.random): number {
-  const randomValue = rng();
-  const boundedRandomValue = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), .999999999999) : 0;
-  return Math.floor(boundedRandomValue * EXERCISE_TYPES.length);
+export function randomExerciseTypeIndex(rng: RandomSource = Math.random): number {
+  return chooseTrainingTypeIndex(rng);
 }
 
 export interface ExerciseSelection {
@@ -48,92 +41,38 @@ export interface ConstructionDetails {
   explanation: string;
 }
 
-function selectWeightedIndex(candidateCount: number, rng: () => number): number {
-  const totalWeight = candidateCount * (candidateCount + 1) / 2;
-  const randomValue = rng();
-  let remainingWeight = (Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), .999999999999) : 0) * totalWeight;
-  for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex += 1) {
-    remainingWeight -= candidateCount - candidateIndex;
-    if (remainingWeight < 0) return candidateIndex;
-  }
-  return Math.max(0, candidateCount - 1);
-}
-
-function fingerprintExercise(exercise: Exercise): string {
-  return JSON.stringify([exercise.type, exercise.question, exercise.promptNotes, exercise.correctAnswer]);
-}
-
-function differsFromPreviousExercise(candidateExercise: Exercise, previous: Exercise): boolean {
-  return fingerprintExercise(candidateExercise) !== fingerprintExercise(previous)
-    && displayedCorrectAnswer(candidateExercise.correctAnswer) !== displayedCorrectAnswer(previous.correctAnswer);
-}
-
-function createDomainExercise(exerciseTypeIndex: number, scale: UiScale, rng: () => number): Exercise | undefined {
-  // UiScale and MajorScale deliberately share only an id; the domain remains the source of exercise truth.
-  const majorScale = majorScaleById.get(scale.id);
-  return majorScale ? createExercise(EXERCISE_TYPES[exerciseTypeIndex] ?? "complete-scale", majorScale, rng) : undefined;
-}
-
-// Kept at module scope so regular-exercise selection never rebuilds domain data in React renders.
 const majorScaleById: ReadonlyMap<string, MajorScale> = new Map(MAJOR_SCALES.map((scale) => [scale.id, scale]));
 
-export function createRegularExercise(
-  exerciseTypeIndex: number,
-  previousSelection?: ExerciseSelection,
-  preferredScale?: UiScale,
-  rng: () => number = Math.random,
-  progress: ProgressState = createEmptyProgress(),
-  now: Date = new Date(),
-): ExerciseSelection | undefined {
-  const rankedScales = preferredScale
-    ? [preferredScale]
-    : selectReviewScales(progress, scales.length, rng, now)
-      .map((scale) => getScale(scale.id))
-      .filter((scale): scale is UiScale => Boolean(scale));
-  const dueScales = rankedScales.filter((scale) => {
-    const dueAt = progress.reviews[scale.id as TonicId]?.dueAt;
-    return !dueAt || !Number.isFinite(Date.parse(dueAt)) || Date.parse(dueAt) <= now.getTime();
+interface RegularExerciseOptions {
+  exerciseTypeIndex: number;
+  previousSelection?: ExerciseSelection | undefined;
+  preferredScale?: UiScale | undefined;
+  rng?: RandomSource;
+  progress?: ProgressState;
+  now?: Date;
+}
+
+export function createRegularExercise({
+  exerciseTypeIndex,
+  previousSelection,
+  preferredScale,
+  rng = Math.random,
+  progress = createEmptyProgress(),
+  now = new Date(),
+}: RegularExerciseOptions): ExerciseSelection | undefined {
+  const preferredMajorScale = preferredScale ? majorScaleById.get(preferredScale.id) : undefined;
+  if (preferredScale && !preferredMajorScale) return undefined;
+  const selection = createWebTrainingExercise({
+    exerciseTypeIndex,
+    previousSelection,
+    preferredScale: preferredMajorScale,
+    rng,
+    progress,
+    now,
   });
-  const practiceScales = dueScales.length ? dueScales : rankedScales;
-  const alternativeScales = preferredScale
-    ? [preferredScale]
-    : practiceScales.filter((scale) => scale.id !== previousSelection?.scale.id);
-  let candidateScales = scales;
-  if (alternativeScales.length) candidateScales = alternativeScales;
-  else if (practiceScales.length) candidateScales = practiceScales;
-  const scale = preferredScale
-    ? preferredScale
-    : candidateScales[selectWeightedIndex(candidateScales.length, rng)];
-  if (!scale) return undefined;
-
-  const firstExercise = createDomainExercise(exerciseTypeIndex, scale, rng);
-  if (!firstExercise) return undefined;
-  if (!previousSelection || differsFromPreviousExercise(firstExercise, previousSelection.exercise)) {
-    return { scale, exercise: firstExercise };
-  }
-
-  // ponytail: four seeds cover today's finite variants; replace with domain variant enumeration if kinds grow.
-  for (const fallbackScale of preferredScale ? [preferredScale] : candidateScales) {
-    for (const seed of [0, .34, .67, .99]) {
-      const candidateExercise = createDomainExercise(exerciseTypeIndex, fallbackScale, () => seed);
-      if (candidateExercise && differsFromPreviousExercise(candidateExercise, previousSelection.exercise)) {
-        return { scale: fallbackScale, exercise: candidateExercise };
-      }
-    }
-  }
-
-  // Fixed-scale exercises such as "build scale" have one form. Rotate the kind instead of escaping the requested scale.
-  if (preferredScale) {
-    for (const fallbackType of EXERCISE_TYPES) {
-      for (const seed of [0, .34, .67, .99]) {
-        const candidateExercise = createDomainExercise(EXERCISE_TYPES.indexOf(fallbackType), preferredScale, () => seed);
-        if (candidateExercise && differsFromPreviousExercise(candidateExercise, previousSelection.exercise)) {
-          return { scale: preferredScale, exercise: candidateExercise };
-        }
-      }
-    }
-  }
-  return undefined;
+  if (!selection) return undefined;
+  const scale = preferredScale ?? getScale(selection.scale.id);
+  return scale ? { scale, exercise: selection.exercise } : undefined;
 }
 
 export function parseExerciseAnswer(exercise: Exercise, answer: string): string[] {

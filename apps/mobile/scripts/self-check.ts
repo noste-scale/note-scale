@@ -15,6 +15,7 @@ import {
   recordAttempt,
   type ExerciseType,
   type PersistenceResult,
+  type StorageAdapter,
 } from "@notescale/music";
 import {
   orderedPitchSequence,
@@ -196,13 +197,13 @@ function verifyExerciseAdaptersAndResponses() {
   };
   const exerciseTypes: readonly ExerciseType[] = ["complete-scale", "build-scale", "find-accidentals", "identify-interval", "find-error"];
   for (const [index, expected] of exerciseTypes.entries()) {
-    const exercise = makeExercise(index, "C", createSequenceRandom([(index + 0.1) / exerciseTypes.length]));
+    const exercise = makeExercise({ generation: index, preferredScaleId: "C", rng: createSequenceRandom([(index + 0.1) / exerciseTypes.length]) });
     assert.equal(exercise?.kind, expected, `random adapter must reach ${expected}`);
     assert.equal(exercise?.sourceScaleId, "C", "a scale route must stay scoped on every exercise");
   }
   const catalogIds = ["C", "G", "D", "A", "E", "B", "F#", "C#", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
   for (const [index, expected] of catalogIds.entries()) {
-    const exercise = makeExercise(index, undefined, createSequenceRandom([(index + 0.1) / catalogIds.length, 0.01]));
+    const exercise = makeExercise({ generation: index, rng: createSequenceRandom([(index + 0.1) / catalogIds.length, 0.01]) });
     assert.equal(exercise?.sourceScaleId, expected, `random adapter must reach scale ${expected}`);
   }
 
@@ -214,11 +215,12 @@ function verifyExerciseAdaptersAndResponses() {
     () => 0.25,
   );
   for (let generation = 0; generation < 5; generation += 1) {
-    assert.equal(selectExerciseScale(generation, undefined, errorProne, () => 0.5, focusDate)?.id, "E", "due error-prone scales must receive deterministic extra weight");
+    assert.equal(selectExerciseScale({ generation, progress: errorProne, rng: () => 0.5, now: focusDate })?.id, "E", "due error-prone scales must receive deterministic extra weight");
   }
-  assert.equal(selectExerciseScale(0, "Cb", errorProne, () => 0, focusDate)?.id, "Cb", "an explicit scale route must always remain fixed");
+  assert.equal(selectExerciseScale({ generation: 0, preferredScaleId: "Cb", progress: errorProne, rng: () => 0, now: focusDate })?.id, "Cb", "an explicit scale route must always remain fixed");
+  assert.equal(makeExercise({ generation: 0, progress: errorProne, rng: () => .5, now: focusDate })?.sourceScaleId, "E", "the exercise bridge must forward progress and time into scale selection");
 
-  const buildExercise = makeExercise(0, "C", createSequenceRandom([0.21]));
+  const buildExercise = makeExercise({ generation: 0, preferredScaleId: "C", rng: createSequenceRandom([0.21]) });
   assert.ok(buildExercise);
   assert.equal(buildExercise.selectionMode, "ordered");
   const orderedLabels = buildExercise.domainExercise.correctAnswer.map((answer) => {
@@ -235,7 +237,7 @@ function verifyExerciseAdaptersAndResponses() {
   assert.equal(wrongGrade.correct, false);
   assert.deepEqual(wrongGrade.errors.map(({ index }) => index), [1, 2], "mobile grading must preserve positional feedback");
 
-  const eAccidentals = makeExercise(0, "E", createSequenceRandom([0.41]));
+  const eAccidentals = makeExercise({ generation: 0, preferredScaleId: "E", rng: createSequenceRandom([0.41]) });
   assert.equal(eAccidentals?.kind, "find-accidentals");
   assert.ok(eAccidentals);
   const eLabels = eAccidentals.domainExercise.correctAnswer.map((answer) => {
@@ -250,7 +252,7 @@ function verifyExerciseAdaptersAndResponses() {
   assert.deepEqual(new Set(selectedELabels), new Set(eLabels), "all four E-major accidentals must remain selectable together");
   assert.equal(gradeSelection(eAccidentals, selectedELabels).correct, true);
 
-  const cAccidentals = makeExercise(0, "C", createSequenceRandom([0.41]));
+  const cAccidentals = makeExercise({ generation: 0, preferredScaleId: "C", rng: createSequenceRandom([0.41]) });
   assert.equal(cAccidentals?.kind, "find-accidentals");
   assert.ok(cAccidentals?.options.includes("Aucune"), "C-major accidental choices must expose Aucune");
   assert.equal(gradeSelection(cAccidentals, ["Aucune"]).correct, true);
@@ -332,7 +334,6 @@ assert.equal(flattenStyle(null), null);
 assert.equal(flattenStyle(undefined), undefined);
 const nativeStyleSheet = { create: (styles: unknown) => styles, flatten: flattenStyle };
 const themes = await loadComponentModule("../src/theme.tsx", {
-  "@react-native-async-storage/async-storage": {},
   "react-native": {},
   "./progress-state": {},
   "./theme-state": {},
@@ -621,54 +622,74 @@ for (const compact of [false, true]) for (const playing of [false, true]) {
 }
 
 
-// Bookmark checks execute the provider with real persistence helpers, without native storage.
+// Execute providers with injected ports and real persistence helpers, without native storage.
 const lessonPersistence = await import("../src/progress-state.js");
+const themeState = await import("../src/theme-state.js");
 const waitForLessonStorageTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-async function mountLessonProgress(storageMock: {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>
-}) {
+async function mountStorageProvider({ path, name, storage }: { path: string; name: string; storage: StorageAdapter }) {
   const hooks: any[] = [];
-  const effects: (() => (() => void) | void)[] = [];
+  const effects = new Map<number, { dependencies: readonly unknown[] | undefined; cleanup: (() => void) | void }>();
+  let pendingEffects: (() => void)[] = [];
   let hookIndex = 0;
-  let collecting = true;
+  let stateUpdates = 0;
+  let suppliedStorage = storage;
+  const sameDependencies = (previous: readonly unknown[] | undefined, next: readonly unknown[] | undefined) =>
+    Boolean(previous && next && previous.length === next.length && previous.every((value, index) => Object.is(value, next[index])));
   const useState = (initial?: any) => {
     const index = hookIndex++;
     if (!(index in hooks)) hooks[index] = typeof initial === "function" ? initial() : initial;
     return [hooks[index], (next: any) => {
+      stateUpdates += 1;
       hooks[index] = typeof next === "function" ? next(hooks[index]) : next;
     }];
   };
-  const provider = await loadComponentModule("../src/progress.tsx", {
-    "@react-native-async-storage/async-storage": storageMock,
+  const useMemo = (factory: () => unknown, dependencies: readonly unknown[]) => {
+    const index = hookIndex++;
+    if (!hooks[index] || !sameDependencies(hooks[index].dependencies, dependencies)) {
+      hooks[index] = { value: factory(), dependencies };
+    }
+    return hooks[index].value;
+  };
+  const provider = await loadComponentModule(path, {
     "@notescale/music": music,
     "./progress-state": lessonPersistence,
-    "./domain": domain,
+    "./theme-state": themeState,
+    "react-native": { useColorScheme: () => "light" },
     react: {
-      createContext: () => ({ Provider: "ProgressProvider" }),
+      createContext: () => ({ Provider: name }),
       useState,
       useRef: (initial: unknown) => useState({ current: initial })[0],
-      useMemo: (factory: () => unknown) => factory(),
-      useCallback: (callback: unknown) => callback,
-      useEffect: (effect: () => (() => void) | void) => {
-        if (collecting) effects.push(effect);
+      useMemo,
+      useCallback: (callback: unknown, dependencies: readonly unknown[]) => useMemo(() => callback, dependencies),
+      useEffect: (effect: () => (() => void) | void, dependencies?: readonly unknown[]) => {
+        const index = hookIndex++;
+        const previous = effects.get(index);
+        if (!previous || !sameDependencies(previous.dependencies, dependencies)) pendingEffects.push(() => {
+          previous?.cleanup?.();
+          effects.set(index, { dependencies, cleanup: effect() });
+        });
       },
     },
   });
-  const value = () => {
+  const value = (replacementStorage?: StorageAdapter) => {
+    if (replacementStorage) suppliedStorage = replacementStorage;
     hookIndex = 0;
-    return provider.ProgressProvider!({}).props.value;
+    const contextValue = provider[name]!({ storage: suppliedStorage }).props.value;
+    const effectsToRun = pendingEffects;
+    pendingEffects = [];
+    effectsToRun.forEach((effect) => effect());
+    return contextValue;
   };
   value();
-  collecting = false;
-  const cleanups = effects.map((effect) => effect());
-  return { value, unmount: () => cleanups.forEach((cleanup) => cleanup?.()) };
+  return { value, updates: () => stateUpdates, unmount: () => effects.forEach(({ cleanup }) => cleanup?.()) };
 }
+const mountLessonProgress = (storage: StorageAdapter) => mountStorageProvider({ path: "../src/progress.tsx", name: "ProgressProvider", storage });
+const mountTheme = (storage: StorageAdapter) => mountStorageProvider({ path: "../src/theme.tsx", name: "ThemeProvider", storage });
 for (const storedLesson of ["tones", "obsolete-lesson", null]) {
   const writes: string[] = [];
   const provider = await mountLessonProgress({
-    getItem: async (key) => key === "notescale.lesson.v1" ? storedLesson : JSON.stringify(storedProgress),
-    setItem: async (key) => {
+    getItem: (key) => key === "notescale.lesson.v1" ? storedLesson : JSON.stringify(storedProgress),
+    setItem: (key) => {
       writes.push(key);
     },
   });
@@ -729,6 +750,206 @@ providerWithFailedLessonStorage.value().rememberLesson("tones");
 await waitForLessonStorageTick();
 assert.equal(providerWithFailedLessonStorage.value().lessonWarning, undefined);
 providerWithFailedLessonStorage.unmount();
+
+for (const rawProgress of ["{broken", '{"version":2}', null]) {
+  const writes: [string, string][] = [];
+  const provider = await mountLessonProgress({
+    getItem: (key) => key === "notescale.progress.v1" ? rawProgress : null,
+    setItem: (key, value) => { writes.push([key, value]); },
+  });
+  await waitForLessonStorageTick();
+  assert.equal(provider.value().hydrated, true);
+  assert.equal(writes.length, 0, "hydration must not rewrite stored bytes");
+  provider.value().recordAttempt("G", true, "build-scale");
+  await waitForLessonStorageTick();
+  assert.equal(provider.value().progress.attempts.length, 1, "unsafe storage must still allow in-memory training");
+  assert.equal(writes.length, rawProgress === null ? 1 : 0, "corrupt/incompatible bytes must remain protected");
+  if (writes[0]) {
+    assert.equal(writes[0][0], music.PROGRESS_STORAGE_KEY);
+    assert.deepEqual(music.decodeProgress(writes[0][1]).state.attempts, provider.value().progress.attempts);
+  }
+  provider.unmount();
+}
+
+const synchronouslyFailingStorage: StorageAdapter = {
+  getItem: () => { throw new Error("sync read failure"); },
+  setItem: () => { throw new Error("sync write failure"); },
+};
+const syncFailureProvider = await mountLessonProgress(synchronouslyFailingStorage);
+await waitForLessonStorageTick();
+assert.equal(syncFailureProvider.value().hydrated, true);
+assert.equal(syncFailureProvider.value().lessonHydrated, true);
+assert.ok(syncFailureProvider.value().warning);
+assert.ok(syncFailureProvider.value().lessonWarning);
+syncFailureProvider.value().rememberLesson("notes");
+await waitForLessonStorageTick();
+assert.ok(syncFailureProvider.value().lessonWarning.includes("pas été enregistrée"));
+syncFailureProvider.unmount();
+
+const progressWriteFailure = await mountLessonProgress({
+  getItem: () => null,
+  setItem: () => { throw new Error("sync progress write failure"); },
+});
+await waitForLessonStorageTick();
+progressWriteFailure.value().recordAttempt("C", false, "find-error");
+await waitForLessonStorageTick();
+assert.ok(progressWriteFailure.value().warning.includes("enregistrée"));
+assert.equal(progressWriteFailure.value().progress.attempts.length, 1);
+progressWriteFailure.unmount();
+
+for (const preference of ["dark", "light", "system", "invalid", null]) {
+  const writes: [string, string][] = [];
+  const provider = await mountTheme({
+    getItem: () => preference,
+    setItem: (key, value) => { writes.push([key, value]); },
+  });
+  await waitForLessonStorageTick();
+  assert.equal(provider.value().preference, preference === "dark" || preference === "light" ? preference : "system");
+  assert.equal(writes.length, 0);
+  provider.value().cyclePreference();
+  provider.value().cyclePreference();
+  await waitForLessonStorageTick();
+  assert.deepEqual(writes.map(([key]) => key), ["notescale.theme", "notescale.theme"]);
+  assert.equal(writes[1]?.[1], provider.value().preference, "theme writes must remain FIFO and use their existing raw format");
+  provider.unmount();
+}
+for (const storage of [synchronouslyFailingStorage, {
+  getItem: async () => { throw new Error("rejected read"); },
+  setItem: async () => { throw new Error("rejected write"); },
+}]) {
+  const provider = await mountTheme(storage);
+  await waitForLessonStorageTick();
+  provider.value().cyclePreference();
+  await waitForLessonStorageTick();
+  assert.equal(provider.value().preference, "light", "theme storage failures must not block local preference changes");
+  provider.unmount();
+}
+
+for (const mount of [mountLessonProgress, mountTheme]) {
+  let finishRead: (value: string) => void = () => undefined;
+  const pendingRead = new Promise<string>((resolve) => { finishRead = resolve; });
+  const provider = await mount({ getItem: () => pendingRead, setItem: () => undefined });
+  await Promise.resolve();
+  provider.unmount();
+  const previousUpdates = provider.updates();
+  finishRead("dark");
+  await waitForLessonStorageTick();
+  assert.equal(provider.updates(), previousUpdates, "late storage reads must not update unmounted providers");
+}
+let finishThemeRead: (value: string) => void = () => undefined;
+const pendingThemeRead = new Promise<string>((resolve) => { finishThemeRead = resolve; });
+const lateThemeProvider = await mountTheme({ getItem: () => pendingThemeRead, setItem: () => undefined });
+lateThemeProvider.value().cyclePreference();
+finishThemeRead("dark");
+await waitForLessonStorageTick();
+assert.equal(lateThemeProvider.value().preference, "light", "late theme hydration must not replace an explicit selection");
+lateThemeProvider.unmount();
+
+let finishProgressHydration: (value: string) => void = () => undefined;
+const pendingProgressHydration = new Promise<string>((resolve) => { finishProgressHydration = resolve; });
+const hydrationWrites: [string, string][] = [];
+const earlyAttemptProvider = await mountLessonProgress({
+  getItem: (key) => key === music.PROGRESS_STORAGE_KEY ? pendingProgressHydration : null,
+  setItem: (key, value) => { hydrationWrites.push([key, value]); },
+});
+earlyAttemptProvider.value().recordAttempt("C", false, "find-error");
+earlyAttemptProvider.value().recordAttempt("G", true, "build-scale");
+assert.equal(earlyAttemptProvider.value().hydrated, false);
+assert.equal(earlyAttemptProvider.value().progress.attempts.length, 0);
+assert.deepEqual(hydrationWrites, [], "early attempts must wait for the stored history before saving");
+finishProgressHydration(JSON.stringify(storedProgress));
+await waitForLessonStorageTick();
+const mergedProgress = earlyAttemptProvider.value().progress;
+assert.equal(earlyAttemptProvider.value().hydrated, true);
+assert.equal(mergedProgress.attempts.length, 3);
+assert.deepEqual(mergedProgress.attempts[0], storedProgress.attempts[0]);
+assert.deepEqual(mergedProgress.attempts.slice(1).map(({ scaleId, correct, exerciseType }: music.Attempt) => ({ scaleId, correct, exerciseType })), [
+  { scaleId: "C", correct: false, exerciseType: "find-error" },
+  { scaleId: "G", correct: true, exerciseType: "build-scale" },
+]);
+assert.equal(mergedProgress.reviews.C.stage, -1);
+assert.equal(mergedProgress.reviews.G.stage, 0);
+assert.deepEqual(hydrationWrites, [[music.PROGRESS_STORAGE_KEY, music.encodeProgress(mergedProgress)]], "hydration must save exactly the merged snapshot, including its review schedule and streak");
+earlyAttemptProvider.unmount();
+
+for (const [mount, key] of [[mountLessonProgress, music.PROGRESS_STORAGE_KEY], [mountTheme, "notescale.theme"]] as const) {
+  const reads: string[] = [];
+  const writes: [string, string][] = [];
+  const landedValues: string[] = [];
+  const replacementCalls: string[] = [];
+  let releaseFirstWrite: () => void = () => undefined;
+  const pendingFirstWrite = new Promise<void>((resolve) => { releaseFirstWrite = resolve; });
+  const provider = await mount({
+    getItem: (readKey) => {
+      reads.push(readKey);
+      return readKey === music.PROGRESS_STORAGE_KEY ? JSON.stringify(storedProgress) : "system";
+    },
+    setItem: async (writeKey, value) => {
+      writes.push([writeKey, value]);
+      if (writes.length === 1) await pendingFirstWrite;
+      landedValues.push(value);
+    },
+  });
+  await waitForLessonStorageTick();
+  if (key === music.PROGRESS_STORAGE_KEY) provider.value().recordAttempt("C", true, "build-scale");
+  else provider.value().cyclePreference();
+  await waitForLessonStorageTick();
+  assert.equal(writes.length, 1);
+  const originalReads = [...reads];
+  provider.value({
+    getItem: (readKey) => { replacementCalls.push(`read:${readKey}`); return null; },
+    setItem: (writeKey) => { replacementCalls.push(`write:${writeKey}`); },
+  });
+  if (key === music.PROGRESS_STORAGE_KEY) provider.value().recordAttempt("G", false, "find-error");
+  else provider.value().cyclePreference();
+  const expectedLatest = key === music.PROGRESS_STORAGE_KEY ? music.encodeProgress(provider.value().progress) : "dark";
+  await waitForLessonStorageTick();
+  assert.deepEqual(reads, originalReads, "replacement props must not restart hydration");
+  assert.deepEqual(replacementCalls, [], "a provider mount must retain its original storage port");
+  assert.equal(writes.length, 1, "a genuinely pending async write must block the next write");
+  assert.deepEqual(landedValues, []);
+  releaseFirstWrite();
+  await waitForLessonStorageTick();
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes.map(([writeKey]) => writeKey), [key, key]);
+  assert.deepEqual(landedValues, writes.map(([, value]) => value), "async theme/progress saves must finish in FIFO order");
+  assert.equal(writes[1]?.[1], expectedLatest);
+  assert.deepEqual(replacementCalls, [], "queued saves must remain on the original port after replacement");
+  provider.unmount();
+}
+
+for (const mount of [mountLessonProgress, mountTheme]) {
+  let rejectRead: (error: Error) => void = () => undefined;
+  const pendingRead = new Promise<string>((_resolve, reject) => { rejectRead = reject; });
+  const provider = await mount({ getItem: () => pendingRead, setItem: () => undefined });
+  await Promise.resolve();
+  provider.unmount();
+  const updatesAtUnmount = provider.updates();
+  rejectRead(new Error("late read rejection"));
+  await waitForLessonStorageTick();
+  assert.equal(provider.updates(), updatesAtUnmount, "late read failures/retries must not update unmounted providers");
+
+  for (const outcome of ["resolve", "reject"]) {
+    let finishSave: () => void = () => undefined;
+    let rejectSave: (error: Error) => void = () => undefined;
+    let pendingSaveCalls = 0;
+    const pendingSave = new Promise<void>((resolve, reject) => { finishSave = resolve; rejectSave = reject; });
+    const savingProvider = await mount({ getItem: () => null, setItem: () => { pendingSaveCalls += 1; return pendingSave; } });
+    await waitForLessonStorageTick();
+    if (mount === mountLessonProgress) {
+      savingProvider.value().recordAttempt("C", true, "build-scale");
+      savingProvider.value().rememberLesson("tones");
+    } else savingProvider.value().cyclePreference();
+    await waitForLessonStorageTick();
+    assert.equal(pendingSaveCalls, mount === mountLessonProgress ? 2 : 1, "saves must actually be pending before unmount");
+    savingProvider.unmount();
+    const updatesBeforeSettlement = savingProvider.updates();
+    if (outcome === "resolve") finishSave();
+    else rejectSave(new Error("late save rejection"));
+    await waitForLessonStorageTick();
+    assert.equal(savingProvider.updates(), updatesBeforeSettlement, "pending progress/bookmark/theme saves must not update state after unmount");
+  }
+}
 
 let homeLesson: string | undefined;
 let homeLessonHydrated = true;

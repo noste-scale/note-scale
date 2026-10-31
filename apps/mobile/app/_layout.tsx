@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ProgressProvider } from "../src/progress";
@@ -5,7 +6,7 @@ import { ThemeProvider, useTheme } from "../src/theme";
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
+    <ThemeProvider storage={AsyncStorage}>
       <Navigation />
     </ThemeProvider>
   );
@@ -14,7 +15,7 @@ export default function RootLayout() {
 function Navigation() {
   const theme = useTheme();
   return (
-    <ProgressProvider>
+    <ProgressProvider storage={AsyncStorage}>
       <StatusBar style={theme.background === "#101619" ? "light" : "dark"} />
       <Stack screenOptions={{
         contentStyle: { backgroundColor: theme.background },

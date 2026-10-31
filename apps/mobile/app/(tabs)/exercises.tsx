@@ -35,7 +35,7 @@ export default function ExercisesScreen() {
   const lastRecordedExerciseId = useRef<string | undefined>(undefined);
   const exercise = useMemo(
     // ponytail: sample progress only when hydration/generation changes so recording cannot replace the exercise being graded.
-    () => isDailySession ? dailyExercises[exerciseIndex] : makeExercise(exerciseIndex, scopedScaleId, Math.random, progress),
+    () => isDailySession ? dailyExercises[exerciseIndex] : makeExercise({ generation: exerciseIndex, preferredScaleId: scopedScaleId, progress }),
     [isDailySession, dailyExercises, hydrated, exerciseIndex, scopedScaleId],
   );
   const currentResponse = responseForExercise(response, exercise?.id ?? "");

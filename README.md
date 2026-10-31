@@ -76,6 +76,25 @@ native implementation. DOM and native UI are intentionally not shared. npm
 workspaces provide linking and one root lockfile; no monorepo orchestrator is
 needed.
 
+`packages/music/src/training.ts` holds two deliberately separate training
+policies: web weighted selection with anti-repeat fallback, and mobile weighted
+rotation with randomized exercise kind. Both accept domain data, an explicit
+clock value and a random source; app models only adapt their results for display.
+Daily training continues to use the existing shared session factory.
+
+The mobile composition root (`apps/mobile/app/_layout.tsx`) supplies AsyncStorage
+through the existing `StorageAdapter` port to both providers. Providers retain
+one adapter for their mount and own hydration, warnings and serialized writes;
+they accept synchronous/asynchronous storage without importing native storage.
+Bookmark validation uses the shared lesson catalog, not a presentation model.
+
+ESLint checks inward dependency boundaries, including re-exports, literal dynamic
+imports and `require` calls. Core compiles without Node/DOM ambient types; tests
+compile separately. `npm test` also runs
+positive/negative architecture checks and deterministic training/provider checks.
+See [project agent guidance](AGENTS.md) for contextual Clean Code and verification
+rules; no extra layers or DI framework are required.
+
 Canonical domain note IDs use ASCII (`F#`, `Bb`). Rendering converts them to
 French/international names and Unicode accidentals. Written identity remains
 separate from pitch, so `C#` and `Db` sound alike but are never accepted as the

@@ -25,7 +25,7 @@
     "start:mobile": "npm run start --workspace @notescale/mobile",
     "android": "npm run android --workspace @notescale/mobile",
     "ios": "npm run ios --workspace @notescale/mobile",
-    "test": "node --experimental-strip-types --test scripts/verify-mobile-start.test.ts && npm run test --workspaces --if-present",
+    "test": "node --experimental-strip-types --test scripts/verify-mobile-start.test.ts scripts/architecture.test.ts && npm run test --workspaces --if-present",
     "typecheck": "tsc -p tsconfig.scripts.json && npm run typecheck --workspaces --if-present",
     "lint": "eslint scripts && npm run lint --workspaces --if-present",
     "build": "npm run build --workspace @notescale/web",

@@ -42,8 +42,8 @@ describe("web application/domain bridges", () => {
 
   it("creates a different unrevealed exercise even when randomness repeats", () => {
     for (const typeIndex of EXERCISE_TYPES.keys()) {
-      const firstSelection = createRegularExercise(typeIndex, undefined, undefined, () => 0);
-      const nextSelection = createRegularExercise(typeIndex, firstSelection, undefined, () => 0);
+      const firstSelection = createRegularExercise({ exerciseTypeIndex: typeIndex, rng: () => 0 });
+      const nextSelection = createRegularExercise({ exerciseTypeIndex: typeIndex, previousSelection: firstSelection, rng: () => 0 });
       expect(firstSelection).toBeDefined();
       expect(nextSelection).toBeDefined();
       expect(
@@ -56,7 +56,7 @@ describe("web application/domain bridges", () => {
   it("honors a valid scale query and explicitly rejects invalid input", () => {
     const scaleRequest = requestedScale("F#");
     expect(scaleRequest.scale?.id).toBe("F#");
-    expect(createRegularExercise(0, undefined, scaleRequest.scale, () => 0)?.scale.id).toBe("F#");
+    expect(createRegularExercise({ exerciseTypeIndex: 0, preferredScale: scaleRequest.scale, rng: () => 0 })?.scale.id).toBe("F#");
     expect(requestedScale("H").error).toContain("H");
     expect(requestedScale("").error).toContain("vide");
     expect(requestedScale(null)).toEqual({});
@@ -65,8 +65,8 @@ describe("web application/domain bridges", () => {
   it("keeps every requested-scale retry on that scale while changing the exercise", () => {
     const requestedMajorScale = requestedScale("F#").scale!;
     for (const typeIndex of EXERCISE_TYPES.keys()) {
-      const firstSelection = createRegularExercise(typeIndex, undefined, requestedMajorScale, () => 0);
-      const nextSelection = createRegularExercise(typeIndex, firstSelection, requestedMajorScale, () => 0);
+      const firstSelection = createRegularExercise({ exerciseTypeIndex: typeIndex, preferredScale: requestedMajorScale, rng: () => 0 });
+      const nextSelection = createRegularExercise({ exerciseTypeIndex: typeIndex, previousSelection: firstSelection, preferredScale: requestedMajorScale, rng: () => 0 });
       expect(firstSelection?.scale.id).toBe("F#");
       expect(nextSelection?.scale.id).toBe("F#");
       expect(
@@ -84,6 +84,17 @@ describe("web application/domain bridges", () => {
         firstSelection?.exercise.correctAnswer,
       ]));
     }
+  });
+
+  it("retains anti-repeat history even when its presentation scale ID is unknown", () => {
+    const first = createRegularExercise({ exerciseTypeIndex: 3, preferredScale: getScale("C"), rng: () => 0 })!;
+    const next = createRegularExercise({
+      exerciseTypeIndex: 3,
+      previousSelection: { scale: { ...first.scale, id: "unknown" }, exercise: first.exercise },
+      rng: () => 0,
+    });
+    expect(next).toBeDefined();
+    expect(next?.exercise.correctAnswer).not.toEqual(first.exercise.correctAnswer);
   });
 
   it("parses French separators, Unicode accidentals, and every common dash", () => {
@@ -104,9 +115,9 @@ describe("web application/domain bridges", () => {
       new Date("2026-08-11T10:00:00.000Z"),
       () => 0,
     );
-    expect(createRegularExercise(0, undefined, undefined, () => 0, incorrectProgress, now)?.scale.id).toBe("Eb");
+    expect(createRegularExercise({ exerciseTypeIndex: 0, rng: () => 0, progress: incorrectProgress, now })?.scale.id).toBe("Eb");
     const unscheduledProgress = { ...incorrectProgress, reviews: {} };
-    expect(createRegularExercise(0, undefined, undefined, () => 0, unscheduledProgress, now)?.scale.id).toBe("Eb");
+    expect(createRegularExercise({ exerciseTypeIndex: 0, rng: () => 0, progress: unscheduledProgress, now })?.scale.id).toBe("Eb");
 
     const futureReviewProgress = recordAttempt(
       createEmptyProgress(),
@@ -114,7 +125,7 @@ describe("web application/domain bridges", () => {
       now,
       () => 0,
     );
-    expect(createRegularExercise(0, undefined, undefined, () => .999, futureReviewProgress, now)?.scale.id).not.toBe("C");
+    expect(createRegularExercise({ exerciseTypeIndex: 0, rng: () => .999, progress: futureReviewProgress, now })?.scale.id).not.toBe("C");
   });
 
   it("handles empty searches and malformed encoded route ids without throwing", () => {
