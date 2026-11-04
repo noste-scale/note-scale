@@ -6,7 +6,8 @@ import {
   StyleSheet,
   Text,
   useWindowDimensions,
-  View
+  View,
+  type ScrollViewInstance
 } from "react-native";
 import { useTheme } from "./theme";
 
@@ -105,7 +106,7 @@ export function Piano({
   const keyboardScale = Math.max(1, fontScale);
   const whiteKeyWidth = 76 * keyboardScale;
   const blackKeyWidth = 48 * keyboardScale;
-  const keyboardScroll = useRef<ScrollView>(null);
+  const keyboardScroll = useRef<ScrollViewInstance>(null);
   const viewportWidth = useRef(0);
   const tonicPianoKey = pianoKeys.find((pianoKey) => getNotePitchClass(pianoKey.id) === getNotePitchClass(activeNotes[0] ?? "C"));
   const revealTonic = () => keyboardScroll.current?.scrollTo({

@@ -8,9 +8,6 @@
     "packages/*",
     "apps/*"
   ],
-  "overrides": {
-    "expo-router": "57.0.12"
-  },
   "engines": {
     "node": ">=22.13"
   },

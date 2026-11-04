@@ -791,8 +791,9 @@ for (const compact of [false, true]) {
   assert.ok(!failureText.includes("Lecture prête."), "explicit playback errors must override the stopped-phase fallback");
 }
 
-// Run Expo's real release hook before the controller cleanup, in native effect registration order.
+// Run Expo's real release hooks with React's unmount order: insertion cleanups, then effect cleanups.
 for (const compact of [false, true]) for (const playing of [false, true]) {
+  const insertionEffects: (() => (() => void) | void)[] = [];
   const effects: (() => (() => void) | void)[] = [];
   let stateUpdates = 0;
   const reactHooks = {
@@ -801,11 +802,19 @@ for (const compact of [false, true]) for (const playing of [false, true]) {
     }],
     useRef: (initial: unknown) => ({ current: initial }),
     useMemo: (factory: () => unknown) => factory(),
+    useInsertionEffect: (effect: () => (() => void) | void) => {
+      insertionEffects.push(effect);
+    },
     useEffect: (effect: () => (() => void) | void) => {
       effects.push(effect);
     },
   };
-  const releasing = await loadComponentModule(join(dirname(mobileRequire.resolve("expo-modules-core/package.json")), "src/hooks/useReleasingSharedObject.ts"), { react: reactHooks });
+  const expoHooksDirectory = join(dirname(mobileRequire.resolve("expo-modules-core/package.json")), "src/hooks");
+  const releasingLifecycle = await loadComponentModule(join(expoHooksDirectory, "useReleasingSharedObjectWithLifecycle.ts"), { react: reactHooks });
+  const releasing = await loadComponentModule(join(expoHooksDirectory, "useReleasingSharedObject.ts"), {
+    react: reactHooks,
+    "./useReleasingSharedObjectWithLifecycle": releasingLifecycle,
+  });
   let released = false;
   const assertLive = () => assert.equal(released, false, "Cannot use shared object that was already released");
   const player = {
@@ -847,7 +856,7 @@ for (const compact of [false, true]) for (const playing of [false, true]) {
     }
   );
   const tree = collectElements(audio.AudioControls!({ notes: ["Do"], compact }));
-  const cleanups = effects.map((effect) => effect());
+  const cleanups = [...insertionEffects, ...effects].map((effect) => effect());
 
   if (playing) tree.find((entry) => entry?.type === "Pressable" && entry.props.accessibilityLabel === "Lire").props.onPress();
 
@@ -855,6 +864,8 @@ for (const compact of [false, true]) for (const playing of [false, true]) {
 
   assert.equal(Boolean(staleTimer), playing);
   assert.doesNotThrow(() => cleanups.forEach((cleanup) => cleanup?.()), "leaving an audio screen must not access Expo's released player");
+  // Expo 58 releases the native player one microtask after the last cleanup.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
   assert.equal(released, true, "Expo must retain ownership of native player disposal");
   assert.equal(timerCallback, undefined, "unmount must cancel the sequence timer");
   const updatesAfterUnmount = stateUpdates;

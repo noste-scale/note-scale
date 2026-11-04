@@ -28,7 +28,7 @@ Une compilation réussie ne prouve pas le fonctionnement de l'audio sur appareil
 ## Prérequis
 
 - Windows et PowerShell **7 ou supérieur** ; commande `pwsh` disponible.
-- Node.js **22.13 ou supérieur** compatible avec Expo SDK 57 ; Node 22.21.1 et
+- Node.js **22.13 ou supérieur** compatible avec Expo SDK 58 ; Node 22.21.1 et
   npm 10.9.4 observés dans cet environnement.
 - JDK 17 : `java`, `keytool` et `jarsigner` fournis ensemble.
 - Android SDK avec outils en ligne de commande, Platform Tools, plateforme 36,
@@ -37,7 +37,7 @@ Une compilation réussie ne prouve pas le fonctionnement de l'audio sur appareil
 - Accès réseau lors du premier téléchargement des dépendances npm, Gradle et
   Android. Prévoir espace disque et temps pour les dépendances natives.
 
-Versions du projet : Expo 57.0.12, React Native 0.86.2 et React 19.2.3.
+Versions du projet : Expo 58.0.23, React Native 0.88.1 et React 19.3.0.
 Configuration Android native par défaut : minimum API 24, compilation et cible
 API 36 ; wrapper Gradle 9.3.1. CMake 3.22.1 est utilisé par les modules natifs.
 Build Tools 35.0.0 est également demandé par certaines dépendances, en plus de
