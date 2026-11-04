@@ -12,6 +12,14 @@ import { AudioControls } from "../src/audio";
 import { scales } from "../src/domain";
 import { useTheme } from "../src/theme";
 
+function describeKeySignature(scale: (typeof scales)[number]): string {
+  if (scale.keySignatureCount === 0) return "Aucune altération";
+
+  const accidentalWord = scale.keySignatureCount > 1 ? "altérations" : "altération";
+
+  return `${scale.keySignatureCount} ${accidentalWord} : ${scale.accidentals.join(", ")}`;
+}
+
 export default function ScalesScreen() {
   const theme = useTheme();
   const isScreenFocused = useIsFocused();
@@ -35,7 +43,7 @@ export default function ScalesScreen() {
           borderColor: theme.border
         }}>
           <Heading>{scale.frenchName}</Heading>
-          <Body muted>{scale.keySignatureCount === 0 ? "Aucune altération" : `${scale.keySignatureCount} altération${scale.keySignatureCount > 1 ? "s" : ""} : ${scale.accidentals.join(", ")}`}</Body>
+          <Body muted>{describeKeySignature(scale)}</Body>
           <Row>
             {isScreenFocused
               ? <AudioControls

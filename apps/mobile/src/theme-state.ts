@@ -4,6 +4,12 @@ export function shouldApplyStoredPreference(loadRevision: number, currentRevisio
   return loadRevision === currentRevision;
 }
 
+const NEXT_THEME_PREFERENCE: Record<ThemePreference, ThemePreference> = {
+  system: "light",
+  light: "dark",
+  dark: "system",
+};
+
 export function nextThemePreference(current: ThemePreference): ThemePreference {
-  return current === "system" ? "light" : current === "light" ? "dark" : "system";
+  return NEXT_THEME_PREFERENCE[current] ?? "system";
 }

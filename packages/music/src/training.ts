@@ -61,6 +61,52 @@ function differsFromPreviousExercise(candidate: Exercise, previous: Exercise): b
     && answerIdentity(candidate) !== answerIdentity(previous);
 }
 
+// ponytail: four seeds cover today's finite variants; enumerate domain variants if kinds grow.
+const FALLBACK_EXERCISE_SEEDS = [0, .34, .67, .99] as const;
+
+function findDifferentExercise(
+  exerciseTypes: readonly ExerciseType[],
+  scales: readonly MajorScale[],
+  previous: Exercise,
+): TrainingSelection | undefined {
+  for (const scale of scales) {
+    for (const exerciseType of exerciseTypes) {
+      for (const seed of FALLBACK_EXERCISE_SEEDS) {
+        const exercise = createExercise(exerciseType, scale, () => seed);
+
+        if (differsFromPreviousExercise(exercise, previous)) return { scale, exercise };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isReviewDue(progress: ProgressState, scale: MajorScale, now: Date): boolean {
+  const dueAt = progress.reviews[scale.id]?.dueAt;
+
+  return !dueAt
+    || !Number.isFinite(Date.parse(dueAt))
+    || Date.parse(dueAt) <= now.getTime();
+}
+
+function chooseWebCandidateScales(
+  progress: ProgressState,
+  previousScaleId: string | undefined,
+  rng: RandomSource,
+  now: Date,
+): readonly MajorScale[] {
+  const rankedScales = selectReviewScales(progress, MAJOR_SCALES.length, rng, now);
+  const dueScales = rankedScales.filter((scale) => isReviewDue(progress, scale, now));
+  const practiceScales = dueScales.length ? dueScales : rankedScales;
+  const alternativeScales = practiceScales.filter((scale) => scale.id !== previousScaleId);
+
+  if (alternativeScales.length) return alternativeScales;
+  if (practiceScales.length) return practiceScales;
+
+  return MAJOR_SCALES;
+}
+
 export interface WebTrainingOptions {
   exerciseTypeIndex: number;
   previousSelection?: {
@@ -81,52 +127,26 @@ export function createWebTrainingExercise({
   rng,
   now,
 }: WebTrainingOptions): TrainingSelection | undefined {
-  const rankedScales = preferredScale ? [preferredScale] : selectReviewScales(progress, MAJOR_SCALES.length, rng, now);
-  const dueScales = rankedScales.filter((scale) => {
-    const dueAt = progress.reviews[scale.id]?.dueAt;
-
-    return !dueAt
-      || !Number.isFinite(Date.parse(dueAt))
-      || Date.parse(dueAt) <= now.getTime();
-  });
-  const practiceScales = dueScales.length ? dueScales : rankedScales;
-  const alternativeScales = preferredScale ? [preferredScale] : practiceScales.filter((scale) => scale.id !== previousSelection?.scale.id);
-  let candidateScales = MAJOR_SCALES;
-
-  if (alternativeScales.length) candidateScales = alternativeScales;
-  else if (practiceScales.length) candidateScales = practiceScales;
-
+  const candidateScales = preferredScale
+    ? [preferredScale]
+    : chooseWebCandidateScales(progress, previousSelection?.scale.id, rng, now);
   const scale = preferredScale ?? candidateScales[selectWeightedIndex(candidateScales.length, rng)];
 
   if (!scale) return undefined;
 
-  const firstExercise = createExercise(TRAINING_EXERCISE_TYPES[exerciseTypeIndex] ?? "complete-scale", scale, rng);
+  const exerciseType = TRAINING_EXERCISE_TYPES[exerciseTypeIndex] ?? "complete-scale";
+  const firstExercise = createExercise(exerciseType, scale, rng);
 
   if (!previousSelection || differsFromPreviousExercise(firstExercise, previousSelection.exercise)) {
     return { scale, exercise: firstExercise };
   }
 
-  // ponytail: four seeds cover today's finite variants; enumerate domain variants if kinds grow.
-  for (const fallbackScale of preferredScale ? [preferredScale] : candidateScales) {
-    for (const seed of [0, .34, .67, .99]) {
-      const exercise = createExercise(TRAINING_EXERCISE_TYPES[exerciseTypeIndex] ?? "complete-scale", fallbackScale, () => seed);
+  const sameTypeAlternative = findDifferentExercise([exerciseType], candidateScales, previousSelection.exercise);
 
-      if (differsFromPreviousExercise(exercise, previousSelection.exercise)) return { scale: fallbackScale, exercise };
-    }
-  }
+  if (sameTypeAlternative || !preferredScale) return sameTypeAlternative;
 
   // Fixed-scale exercises may have one form; rotate kinds without escaping the requested scale.
-  if (preferredScale) {
-    for (const fallbackType of TRAINING_EXERCISE_TYPES) {
-      for (const seed of [0, .34, .67, .99]) {
-        const exercise = createExercise(fallbackType, preferredScale, () => seed);
-
-        if (differsFromPreviousExercise(exercise, previousSelection.exercise)) return { scale: preferredScale, exercise };
-      }
-    }
-  }
-
-  return undefined;
+  return findDifferentExercise(TRAINING_EXERCISE_TYPES, [preferredScale], previousSelection.exercise);
 }
 
 export interface MobileTrainingOptions {
@@ -151,7 +171,7 @@ export function selectMobileTrainingScale({
 
   const rankedScales = selectReviewScales(progress, MAJOR_SCALES.length, rng, now);
   const weightedScales = rankedScales.flatMap((scale) => {
-    const recentErrorCount = recentScaleAttempts(progress, scale.id, 6).filter((attempt) => !attempt.correct).length;
+    const recentErrorCount = recentScaleAttempts(progress, scale.id).filter((attempt) => !attempt.correct).length;
     const weight = 1 + recentErrorCount + (isScaleDue(progress, scale.id, now) ? 3 : 0);
 
     return Array.from({ length: weight }, () => scale);
@@ -168,7 +188,7 @@ export function createMobileTrainingExercise(options: MobileTrainingOptions): Tr
 
   if (!scale) return undefined;
 
-  const kind = TRAINING_EXERCISE_TYPES[chooseTrainingTypeIndex(options.rng)] ?? "complete-scale";
+  const exerciseType = TRAINING_EXERCISE_TYPES[chooseTrainingTypeIndex(options.rng)] ?? "complete-scale";
 
-  return { scale, exercise: createExercise(kind, scale, options.rng) };
+  return { scale, exercise: createExercise(exerciseType, scale, options.rng) };
 }

@@ -1,6 +1,7 @@
 import { formatNote, normalizeNoteId } from "./notes";
 import { MAJOR_SCALES } from "./scale-generator";
 import type {
+  AnswerError,
   DailySession,
   Exercise,
   ExerciseType,
@@ -201,6 +202,58 @@ function normalizeAnswer(value: unknown): string | null {
   return noteId ?? trimmedAnswer.toLocaleLowerCase("fr");
 }
 
+function findUnorderedAnswerErrors(expectedAnswer: readonly string[], actualAnswer: readonly string[]): AnswerError[] {
+  const errors: AnswerError[] = [];
+  const submittedAccidentals = new Set(actualAnswer);
+  const expectedAccidentals = new Set(expectedAnswer);
+
+  for (const expectedAccidental of expectedAccidentals) {
+    if (!submittedAccidentals.has(expectedAccidental))
+      errors.push({
+        expected: expectedAccidental,
+        message: `${formatNote(expectedAccidental)} manque.`
+      });
+  }
+
+  for (const submittedAccidental of submittedAccidentals) {
+    if (!expectedAccidentals.has(submittedAccidental))
+      errors.push({
+        actual: submittedAccidental,
+        message: `${formatNote(submittedAccidental)} n’appartient pas à l’armure.`
+      });
+  }
+
+  if (actualAnswer.length !== submittedAccidentals.size)
+    errors.push({ message: "Une altération a été répétée." });
+
+  return errors;
+}
+
+function describeAnswerItem(item: string | undefined): string {
+  return item ? formatNote(item) : "rien";
+}
+
+function findOrderedAnswerErrors(expectedAnswer: readonly string[], actualAnswer: readonly string[]): AnswerError[] {
+  const errors: AnswerError[] = [];
+  const answerLength = Math.max(actualAnswer.length, expectedAnswer.length);
+
+  for (let index = 0; index < answerLength; index += 1) {
+    const expectedItem = expectedAnswer[index];
+    const actualItem = actualAnswer[index];
+
+    if (actualItem !== expectedItem) {
+      errors.push({
+        index,
+        ...(expectedItem ? { expected: expectedItem } : {}),
+        ...(actualItem ? { actual: actualItem } : {}),
+        message: `Position ${index + 1} : attendu ${describeAnswerItem(expectedItem)}, reçu ${describeAnswerItem(actualItem)}.`,
+      });
+    }
+  }
+
+  return errors;
+}
+
 export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult {
   let answerItems: unknown[] = [];
 
@@ -225,47 +278,9 @@ export function gradeExercise(exercise: Exercise, answer: unknown): GradeResult 
   const expectedAnswer = exercise.correctAnswer.map((item) => normalizeAnswer(item) ?? item);
   const actualAnswer = normalizedAnswer as string[];
   const answerOrderDoesNotMatter = exercise.type === "find-accidentals";
-  const errors = [];
-
-  if (answerOrderDoesNotMatter) {
-    const submittedAccidentals = new Set(actualAnswer);
-    const expectedAccidentals = new Set(expectedAnswer);
-
-    for (const expectedAccidental of expectedAccidentals) {
-      if (!submittedAccidentals.has(expectedAccidental))
-        errors.push({
-          expected: expectedAccidental,
-          message: `${formatNote(expectedAccidental)} manque.`
-        });
-    }
-
-    for (const submittedAccidental of submittedAccidentals) {
-      if (!expectedAccidentals.has(submittedAccidental))
-        errors.push({
-          actual: submittedAccidental,
-          message: `${formatNote(submittedAccidental)} n’appartient pas à l’armure.`
-        });
-    }
-
-    if (actualAnswer.length !== submittedAccidentals.size)
-      errors.push({ message: "Une altération a été répétée." });
-  } else {
-    const answerLength = Math.max(actualAnswer.length, expectedAnswer.length);
-
-    for (let index = 0; index < answerLength; index += 1) {
-      const expectedItem = expectedAnswer[index];
-      const actualItem = actualAnswer[index];
-
-      if (actualItem !== expectedItem) {
-        errors.push({
-          index,
-          ...(expectedItem ? { expected: expectedItem } : {}),
-          ...(actualItem ? { actual: actualItem } : {}),
-          message: `Position ${index + 1} : attendu ${expectedItem ? formatNote(expectedItem) : "rien"}, reçu ${actualItem ? formatNote(actualItem) : "rien"}.`,
-        });
-      }
-    }
-  }
+  const errors = answerOrderDoesNotMatter
+    ? findUnorderedAnswerErrors(expectedAnswer, actualAnswer)
+    : findOrderedAnswerErrors(expectedAnswer, actualAnswer);
 
   return {
     graded: true,

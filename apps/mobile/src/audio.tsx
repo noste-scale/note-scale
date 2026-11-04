@@ -73,17 +73,14 @@ function createPitchSequence(notes: readonly string[], direction: "up" | "down")
   }), direction);
 }
 
-export function AudioControls({
-  notes,
-  compact = false,
-  piano = false,
-  scaleLabel,
-}: {
-  notes: string[];
-  compact?: boolean;
-  piano?: boolean;
-  scaleLabel?: string;
-}) {
+type PlaybackDirection = "up" | "down";
+
+interface PlaybackMessage {
+  text: string;
+  danger: boolean;
+}
+
+function useScalePlayback(notes: readonly string[]) {
   const player = useAudioPlayer(null);
   const playbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const noteDeadlineMs = useRef(0);
@@ -93,16 +90,11 @@ export function AudioControls({
   const playbackGeneration = useRef(0);
   const playbackOwner = useRef(Symbol("notescale-audio"));
   const playbackPhaseRef = useRef<PlaybackPhase>("stopped");
-  const [direction, setDirection] = useState<"up" | "down">("up");
+  const [direction, setDirection] = useState<PlaybackDirection>("up");
   const [slow, setSlow] = useState(false);
-  const [showPiano, setShowPiano] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [playbackPhase, setPlaybackPhase] = useState<PlaybackPhase>("stopped");
   const [soundingPitch, setSoundingPitch] = useState<number>();
-  const [playbackMessage, setPlaybackMessage] = useState<{
-    text: string;
-    danger: boolean
-  }>();
+  const [playbackMessage, setPlaybackMessage] = useState<PlaybackMessage>();
   const configurationKey = playbackConfigurationKey(notes, direction, slow);
   const previousConfigurationKey = useRef(configurationKey);
 
@@ -134,6 +126,12 @@ export function AudioControls({
     releaseOwnership();
   };
 
+  const resetPlayerWithMessage = (message: PlaybackMessage) => {
+    resetPlayer();
+    updatePlaybackPhase("stop");
+    setPlaybackMessage(message);
+  };
+
   const stopPlayback = (event: "stop" | "preempt" = "stop") => {
     resetPlayer();
     updatePlaybackPhase(event);
@@ -154,6 +152,17 @@ export function AudioControls({
     releaseOwnership();
   };
 
+  // A stale token belongs to a reset sequence, so its queued note must not play.
+  const scheduleNextNote = (noteDurationMs: number, playbackToken: number) => {
+    noteDeadlineMs.current = Date.now() + noteDurationMs;
+    playbackTimer.current = setTimeout(() => {
+      const nextNoteIndex = currentNoteIndex.current + 1;
+
+      if (nextNoteIndex < pitchSequence.current.length) playNoteAtIndex(nextNoteIndex, playbackToken);
+      else completePlayback(playbackToken);
+    }, noteDurationMs);
+  };
+
   const playNoteAtIndex = (noteIndex: number, playbackToken: number) => {
     if (playbackToken !== playbackGeneration.current) return;
 
@@ -161,9 +170,7 @@ export function AudioControls({
     const sampleSource = sequencedPitch ? samples[sequencedPitch.sampleKey] : undefined;
 
     if (!sequencedPitch || sampleSource === undefined) {
-      resetPlayer();
-      updatePlaybackPhase("stop");
-      setPlaybackMessage({ text: "Cette note ne peut pas être lue. Réessaie avec une autre gamme.", danger: true });
+      resetPlayerWithMessage({ text: "Cette note ne peut pas être lue. Réessaie avec une autre gamme.", danger: true });
 
       return;
     }
@@ -176,19 +183,15 @@ export function AudioControls({
       setSoundingPitch(sequencedPitch.pitchClass);
       const noteDurationMs = slow ? 1100 : 650;
       remainingNoteDurationMs.current = noteDurationMs;
-      noteDeadlineMs.current = Date.now() + noteDurationMs;
-      playbackTimer.current = setTimeout(() => {
-        if (noteIndex + 1 < pitchSequence.current.length) playNoteAtIndex(noteIndex + 1, playbackToken);
-        else completePlayback(playbackToken);
-      }, noteDurationMs);
+      scheduleNextNote(noteDurationMs, playbackToken);
     } catch {
-      resetPlayer();
-      updatePlaybackPhase("stop");
-      setPlaybackMessage({ text: "La lecture a échoué. Les autres contrôles restent disponibles.", danger: true });
+      resetPlayerWithMessage({ text: "La lecture a échoué. Les autres contrôles restent disponibles.", danger: true });
     }
   };
 
-  const startSequence = (nextSequence: SequencedPitch[], restart: boolean) => {
+  const startSequence = (nextSequence: SequencedPitch[]) => {
+    const restart = playbackPhaseRef.current !== "stopped";
+
     if (activePlayback?.playbackOwner !== playbackOwner.current) activePlayback?.preempt();
 
     resetPlayer();
@@ -204,11 +207,10 @@ export function AudioControls({
     activePlayback = { playbackOwner: playbackOwner.current, preempt: () => stopPlayback("preempt") };
     setPlaybackMessage(undefined);
     updatePlaybackPhase(restart ? "restart" : "start");
-    const playbackToken = playbackGeneration.current;
-    playNoteAtIndex(0, playbackToken);
+    playNoteAtIndex(0, playbackGeneration.current);
   };
 
-  const startPlayback = () => startSequence(createPitchSequence(notes, direction), playbackPhaseRef.current !== "stopped");
+  const startPlayback = () => startSequence(createPitchSequence(notes, direction));
 
   const playSingleNote = (note: string) => {
     const pitchClass = getNotePitchClass(note);
@@ -220,13 +222,7 @@ export function AudioControls({
       return;
     }
 
-    startSequence([
-      {
-        pitchClass,
-        octave: 4,
-        sampleKey
-      }
-    ], playbackPhaseRef.current !== "stopped");
+    startSequence([{ pitchClass, octave: 4, sampleKey }]);
   };
 
   const pausePlayback = () => {
@@ -246,22 +242,14 @@ export function AudioControls({
       player.play();
       updatePlaybackPhase("resume");
       setPlaybackMessage(undefined);
-      const playbackToken = playbackGeneration.current;
-      const noteDurationMs = remainingNoteDurationMs.current;
-      noteDeadlineMs.current = Date.now() + noteDurationMs;
-      playbackTimer.current = setTimeout(() => {
-        const noteIndex = currentNoteIndex.current;
-
-        if (noteIndex + 1 < pitchSequence.current.length) playNoteAtIndex(noteIndex + 1, playbackToken);
-        else completePlayback(playbackToken);
-      }, noteDurationMs);
+      scheduleNextNote(remainingNoteDurationMs.current, playbackGeneration.current);
     } catch {
       stopPlayback();
       setPlaybackMessage({ text: "La reprise de la lecture a échoué.", danger: true });
     }
   };
 
-  const configurePlayback = (nextDirection: "up" | "down", nextSlow: boolean) => {
+  const configurePlayback = (nextDirection: PlaybackDirection, nextSlow: boolean) => {
     if (nextDirection === direction && nextSlow === slow) return;
     if (playbackPhaseRef.current === "playing" || playbackPhaseRef.current === "paused") stopPlayback();
 
@@ -275,9 +263,7 @@ export function AudioControls({
     previousConfigurationKey.current = configurationKey;
 
     if (playbackPhaseRef.current !== "stopped") {
-      resetPlayer();
-      updatePlaybackPhase("stop");
-      setPlaybackMessage({
+      resetPlayerWithMessage({
         text: "Lecture réinitialisée après le changement de gamme, de sens ou de vitesse.",
         danger: false
       });
@@ -296,36 +282,140 @@ export function AudioControls({
     };
   }, [player]);
 
-  const isPlaybackActive = playbackPhase === "playing" || playbackPhase === "paused";
-  const mainAction = isPlaybackActive
-    || playbackPhase === "completed"
-    || playbackPhase === "preempted"
-    ? "Recommencer"
-    : "Lire";
-  const pauseAction = playbackPhase === "paused" ? "Reprendre" : "Pause";
-  let handleMainAction = startPlayback;
+  return {
+    direction,
+    slow,
+    playbackPhase,
+    playbackMessage,
+    soundingPitch,
+    startPlayback,
+    playSingleNote,
+    pausePlayback,
+    resumePlayback,
+    stopPlayback,
+    configurePlayback,
+  };
+}
 
-  if (playbackPhase === "paused") handleMainAction = resumePlayback;
-  else if (playbackPhase === "playing") handleMainAction = pausePlayback;
+function choosePrimaryActionLabel(playbackPhase: PlaybackPhase): string {
+  if (playbackPhase === "paused") return "Reprendre";
+  if (playbackPhase === "playing") return "Pause";
+  if (playbackPhase === "completed" || playbackPhase === "preempted") return "Recommencer";
+
+  return "Lire";
+}
+
+function ScaleNoteButtons({ notes, soundingPitch, onPlayNote }: {
+  notes: readonly string[];
+  soundingPitch: number | undefined;
+  onPlayNote: (note: string) => void;
+}) {
+  return (
+    <>
+      <Body>Écouter une note, depuis {notes[0]}</Body>
+      <Row>
+        {notes.slice(0, 7).map((note, index) => <Action
+          key={`${note}-${index}`}
+          label={note}
+          onPress={() => onPlayNote(note)}
+          hint={`Écouter la note ${note}`}
+          selected={getNotePitchClass(note) === soundingPitch}
+          secondary
+        />)}
+      </Row>
+    </>
+  );
+}
+
+function PlaybackSettings({ direction, slow, onConfigure }: {
+  direction: PlaybackDirection;
+  slow: boolean;
+  onConfigure: (direction: PlaybackDirection, slow: boolean) => void;
+}) {
+  return (
+    <>
+      <Body>Sens de lecture</Body>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture">
+        <Row>
+          <Action
+            role="radio"
+            label="Ascendante"
+            onPress={() => onConfigure("up", slow)}
+            selected={direction === "up"}
+            secondary
+          />
+          <Action
+            role="radio"
+            label="Descendante"
+            onPress={() => onConfigure("down", slow)}
+            selected={direction === "down"}
+            secondary
+          />
+        </Row>
+      </View>
+      <Body>Vitesse de lecture</Body>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture">
+        <Row>
+          <Action
+            role="radio"
+            label="Normale"
+            onPress={() => onConfigure(direction, false)}
+            selected={!slow}
+            secondary
+          />
+          <Action
+            role="radio"
+            label="Lente"
+            onPress={() => onConfigure(direction, true)}
+            selected={slow}
+            secondary
+          />
+        </Row>
+      </View>
+    </>
+  );
+}
+
+export function AudioControls({
+  notes,
+  compact = false,
+  piano = false,
+  scaleLabel,
+}: {
+  notes: string[];
+  compact?: boolean;
+  piano?: boolean;
+  scaleLabel?: string;
+}) {
+  const playback = useScalePlayback(notes);
+  const [showPiano, setShowPiano] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const { playbackPhase, playbackMessage } = playback;
+  const isPlaybackActive = playbackPhase === "playing" || playbackPhase === "paused";
+  const primaryActionLabel = choosePrimaryActionLabel(playbackPhase);
+  let handlePrimaryAction = playback.startPlayback;
+
+  if (playbackPhase === "paused") handlePrimaryAction = playback.resumePlayback;
+  else if (playbackPhase === "playing") handlePrimaryAction = playback.pausePlayback;
 
   const controls = (
     <Row>
       <Action
-        label={isPlaybackActive ? pauseAction : mainAction}
-        accessibilityLabel={scalePlaybackLabel(isPlaybackActive ? pauseAction : mainAction, scaleLabel)}
-        onPress={handleMainAction}
+        label={primaryActionLabel}
+        accessibilityLabel={scalePlaybackLabel(primaryActionLabel, scaleLabel)}
+        onPress={handlePrimaryAction}
         secondary={compact}
       />
       {isPlaybackActive ? <Action
         label="Arrêter"
         accessibilityLabel={scalePlaybackLabel("Arrêter", scaleLabel)}
-        onPress={() => stopPlayback()}
+        onPress={() => playback.stopPlayback()}
         secondary
       /> : null}
       {isPlaybackActive ? <Action
         label="Recommencer"
         accessibilityLabel={scalePlaybackLabel("Recommencer", scaleLabel)}
-        onPress={startPlayback}
+        onPress={playback.startPlayback}
         secondary
       /> : null}
     </Row>
@@ -350,24 +440,14 @@ export function AudioControls({
       <Body muted>Lecture locale, sans connexion.</Body>
       {controls}
       {status}
-      {piano && showPiano ? <Piano
-        key={notes[0]}
-        activeNotes={notes}
-        soundingPitch={soundingPitch}
-        onPlayNote={playSingleNote}
-      /> : <>
-        <Body>Écouter une note, depuis {notes[0]}</Body>
-        <Row>
-          {notes.slice(0, 7).map((note, index) => <Action
-            key={`${note}-${index}`}
-            label={note}
-            onPress={() => playSingleNote(note)}
-            hint={`Écouter la note ${note}`}
-            selected={getNotePitchClass(note) === soundingPitch}
-            secondary
-          />)}
-        </Row>
-      </>}
+      {piano && showPiano
+        ? <Piano
+          key={notes[0]}
+          activeNotes={notes}
+          soundingPitch={playback.soundingPitch}
+          onPlayNote={playback.playSingleNote}
+        />
+        : <ScaleNoteButtons notes={notes} soundingPitch={playback.soundingPitch} onPlayNote={playback.playSingleNote} />}
       {piano ? <Action
         label={showPiano ? "Revenir aux notes de la gamme" : "Afficher le piano"}
         expanded={showPiano}
@@ -380,46 +460,9 @@ export function AudioControls({
         onPress={() => setShowSettings(!showSettings)}
         secondary
       />
-      {showSettings ? <>
-        <Body>Sens de lecture</Body>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Sens de lecture">
-          <Row>
-            <Action
-              role="radio"
-              label="Ascendante"
-              onPress={() => configurePlayback("up", slow)}
-              selected={direction === "up"}
-              secondary
-            />
-            <Action
-              role="radio"
-              label="Descendante"
-              onPress={() => configurePlayback("down", slow)}
-              selected={direction === "down"}
-              secondary
-            />
-          </Row>
-        </View>
-        <Body>Vitesse de lecture</Body>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Vitesse de lecture">
-          <Row>
-            <Action
-              role="radio"
-              label="Normale"
-              onPress={() => configurePlayback(direction, false)}
-              selected={!slow}
-              secondary
-            />
-            <Action
-              role="radio"
-              label="Lente"
-              onPress={() => configurePlayback(direction, true)}
-              selected={slow}
-              secondary
-            />
-          </Row>
-        </View>
-      </> : null}
+      {showSettings
+        ? <PlaybackSettings direction={playback.direction} slow={playback.slow} onConfigure={playback.configurePlayback} />
+        : null}
     </Card>
   );
 }

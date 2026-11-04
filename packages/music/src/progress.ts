@@ -12,6 +12,8 @@ import type {
 
 export const REVIEW_INTERVAL_DAYS = [1, 3, 7, 14, 30] as const;
 const WRONG_REVIEW_DELAY_MS = 10 * 60 * 1_000;
+const RECENT_ATTEMPT_WINDOW = 6;
+const MASTERY_CORRECT_ATTEMPT_COUNT = 5;
 
 export function createEmptyProgress(): ProgressState {
   return {
@@ -63,39 +65,45 @@ function updateReview(
   };
 }
 
+function findLatestAnswerTimestamp(attempts: readonly Attempt[]): number {
+  return attempts.reduce((latest, attempt) => {
+    const answeredTimestamp = parseValidDate(attempt.answeredAt)?.getTime();
+
+    return answeredTimestamp === undefined ? latest : Math.max(latest, answeredTimestamp);
+  }, Number.NEGATIVE_INFINITY);
+}
+
+// Answers stay strictly ordered, even when the clock is invalid or moves backwards.
+function chooseAnswerTimestamp(attempts: readonly Attempt[], now: Date): number {
+  const latestTimestamp = findLatestAnswerTimestamp(attempts);
+  const requestedTimestamp = now.getTime();
+
+  if (Number.isFinite(requestedTimestamp)) return Math.max(requestedTimestamp, latestTimestamp + 1);
+  if (Number.isFinite(latestTimestamp)) return latestTimestamp + 1;
+
+  return Date.now();
+}
+
+function createAttemptNonce(rng: RandomSource): string {
+  const randomValue = rng();
+  const boundedRandomValue = Number.isFinite(randomValue)
+    ? Math.min(Math.max(randomValue, 0), 0.9999999999999999)
+    : 0;
+
+  return Math.floor(boundedRandomValue * Number.MAX_SAFE_INTEGER)
+    .toString(36)
+    .padStart(11, "0");
+}
+
 export function recordAttempt(
   state: ProgressState,
   input: RecordAttemptInput,
   now: Date = new Date(),
   rng: RandomSource = Math.random,
 ): ProgressState {
-  const latestTimestamp = state.attempts.reduce((latest, attempt) => {
-    const answeredTimestamp = parseValidDate(attempt.answeredAt)?.getTime();
-
-    return answeredTimestamp === undefined ? latest : Math.max(latest, answeredTimestamp);
-  }, Number.NEGATIVE_INFINITY);
-  const requestedTimestamp = now.getTime();
-  let effectiveTimestamp: number;
-
-  if (Number.isFinite(requestedTimestamp)) {
-    effectiveTimestamp = Math.max(requestedTimestamp, latestTimestamp + 1);
-  } else if (Number.isFinite(latestTimestamp)) {
-    effectiveTimestamp = latestTimestamp + 1;
-  } else {
-    effectiveTimestamp = Date.now();
-  }
-
-  const effectiveNow = new Date(effectiveTimestamp);
-  const answeredAt = effectiveNow.toISOString();
-  const randomValue = rng();
-  const boundedRandomValue = Number.isFinite(randomValue)
-    ? Math.min(Math.max(randomValue, 0), 0.9999999999999999)
-    : 0;
-  const nonce = Math.floor(boundedRandomValue * Number.MAX_SAFE_INTEGER)
-    .toString(36)
-    .padStart(11, "0");
+  const answeredAt = new Date(chooseAnswerTimestamp(state.attempts, now)).toISOString();
   const attempt: Attempt = {
-    id: `${answeredAt}-${nonce}`,
+    id: `${answeredAt}-${createAttemptNonce(rng)}`,
     exerciseType: input.exerciseType,
     ...(input.scaleId ? { scaleId: input.scaleId } : {}),
     correct: input.correct,
@@ -108,7 +116,7 @@ export function recordAttempt(
 export function recentScaleAttempts(
   state: ProgressState,
   scaleId: TonicId,
-  limit = 6
+  limit = RECENT_ATTEMPT_WINDOW
 ): readonly Attempt[] {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 0;
 
@@ -118,13 +126,13 @@ export function recentScaleAttempts(
 }
 
 export function isScaleMastered(state: ProgressState, scaleId: TonicId): boolean {
-  const recentAttempts = recentScaleAttempts(state, scaleId, 6);
+  const recentAttempts = recentScaleAttempts(state, scaleId);
 
-  if (recentAttempts.length !== 6) return false;
+  if (recentAttempts.length !== RECENT_ATTEMPT_WINDOW) return false;
 
   const correctAttemptCount = recentAttempts.filter((attempt) => attempt.correct).length;
 
-  return correctAttemptCount >= 5 && recentAttempts.at(-1)?.correct === true;
+  return correctAttemptCount >= MASTERY_CORRECT_ATTEMPT_COUNT && recentAttempts.at(-1)?.correct === true;
 }
 
 function parseValidDate(value: string): Date | null {
@@ -170,11 +178,82 @@ export function summarizeProgress(state: ProgressState, now: Date = new Date()):
 }
 
 function calculateWeakness(state: ProgressState, scaleId: TonicId): number {
-  const attempts = recentScaleAttempts(state, scaleId, 6);
+  const attempts = recentScaleAttempts(state, scaleId);
 
   if (attempts.length === 0) return -1;
 
   return 1 - attempts.filter((attempt) => attempt.correct).length / attempts.length;
+}
+
+interface ReviewRanking {
+  scale: MajorScale;
+  priorityBand: number;
+  reviewDateSortKey: number;
+  weakness: number;
+  randomTieBreaker: number;
+  catalogIndex: number;
+}
+
+interface ReviewStatus {
+  dueDate: Date | null;
+  isDueNow: boolean;
+  isUnseen: boolean;
+  isUnscheduled: boolean;
+}
+
+function describeReviewStatus(state: ProgressState, scaleId: TonicId, now: Date): ReviewStatus {
+  const review = state.reviews[scaleId];
+  const dueDate = review ? parseValidDate(review.dueAt) : null;
+
+  return {
+    dueDate,
+    isDueNow: Boolean(dueDate && dueDate.getTime() <= now.getTime()),
+    isUnseen: recentScaleAttempts(state, scaleId).length === 0,
+    isUnscheduled: !review || !dueDate,
+  };
+}
+
+// Due or unscheduled practiced scales first, then unseen scales, then scales scheduled later.
+function choosePriorityBand({ isDueNow, isUnseen, isUnscheduled }: ReviewStatus): number {
+  if (isDueNow || (!isUnseen && isUnscheduled)) return 0;
+  if (isUnseen) return 1;
+
+  return 2;
+}
+
+function chooseReviewDateSortKey({ dueDate, isDueNow, isUnseen }: ReviewStatus): number {
+  if (isDueNow) return dueDate?.getTime() ?? 0;
+  if (isUnseen) return 0;
+
+  return dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+}
+
+function rankScaleForReview(
+  state: ProgressState,
+  scale: MajorScale,
+  catalogIndex: number,
+  rng: RandomSource,
+  now: Date,
+): ReviewRanking {
+  const reviewStatus = describeReviewStatus(state, scale.id, now);
+  const randomValue = rng();
+
+  return {
+    scale,
+    priorityBand: choosePriorityBand(reviewStatus),
+    reviewDateSortKey: chooseReviewDateSortKey(reviewStatus),
+    weakness: calculateWeakness(state, scale.id),
+    randomTieBreaker: Number.isFinite(randomValue) ? randomValue : 0,
+    catalogIndex,
+  };
+}
+
+function compareReviewRankings(left: ReviewRanking, right: ReviewRanking): number {
+  return left.priorityBand - right.priorityBand
+    || left.reviewDateSortKey - right.reviewDateSortKey
+    || right.weakness - left.weakness
+    || left.randomTieBreaker - right.randomTieBreaker
+    || left.catalogIndex - right.catalogIndex;
 }
 
 export function selectReviewScales(
@@ -183,41 +262,9 @@ export function selectReviewScales(
   rng: RandomSource = Math.random,
   now: Date = new Date(),
 ): readonly MajorScale[] {
-  const rankedScales = MAJOR_SCALES.map((scale, catalogIndex) => {
-    const review = state.reviews[scale.id];
-    const dueDate = review ? parseValidDate(review.dueAt) : null;
-    const isDueNow = Boolean(dueDate && dueDate.getTime() <= now.getTime());
-    const attempts = recentScaleAttempts(state, scale.id, 6);
-    const isUnseen = attempts.length === 0;
-    const isUnscheduled = !review || !dueDate;
-    const randomValue = rng();
-    let priorityBand = 2;
-
-    if (isDueNow || (!isUnseen && isUnscheduled)) priorityBand = 0;
-    else if (isUnseen) priorityBand = 1;
-
-    let reviewDateSortKey: number;
-
-    if (isDueNow) reviewDateSortKey = dueDate?.getTime() ?? 0;
-    else if (isUnseen) reviewDateSortKey = 0;
-    else reviewDateSortKey = dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
-
-    return {
-      scale,
-      priorityBand,
-      reviewDateSortKey,
-      weakness: calculateWeakness(state, scale.id),
-      randomTieBreaker: Number.isFinite(randomValue) ? randomValue : 0,
-      catalogIndex,
-    };
-  });
-  rankedScales.sort((left, right) =>
-    left.priorityBand - right.priorityBand ||
-    left.reviewDateSortKey - right.reviewDateSortKey ||
-    right.weakness - left.weakness ||
-    left.randomTieBreaker - right.randomTieBreaker ||
-    left.catalogIndex - right.catalogIndex,
-  );
+  const rankedScales = MAJOR_SCALES
+    .map((scale, catalogIndex) => rankScaleForReview(state, scale, catalogIndex, rng, now))
+    .sort(compareReviewRankings);
   const safeCount = Number.isFinite(count) && count > 0
     ? Math.min(Math.floor(count), MAJOR_SCALES.length)
     : 0;

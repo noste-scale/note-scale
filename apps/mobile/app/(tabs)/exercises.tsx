@@ -39,6 +39,76 @@ const exerciseTypeLabels: Record<ExerciseView["kind"], string> = {
 
 const createEmptyResponse = (exerciseId = ""): ExerciseResponse<GradeResult> => ({ exerciseId, selected: [] });
 
+type ChipRole = "radio" | "checkbox" | "button";
+
+function chooseChipRole(selectionMode: ExerciseView["selectionMode"]): ChipRole {
+  if (selectionMode === "single") return "radio";
+  if (selectionMode === "multiple") return "checkbox";
+
+  return "button";
+}
+
+function describeSubtitle({ isDailySession, exerciseIndex, dailyExerciseCount, isScopedToScale }: {
+  isDailySession: boolean;
+  exerciseIndex: number;
+  dailyExerciseCount: number;
+  isScopedToScale: boolean;
+}): string {
+  if (isDailySession) return `Question ${exerciseIndex + 1} sur ${dailyExerciseCount} · environ 3 à 5 minutes`;
+  if (isScopedToScale) return "Tous les prochains exercices restent liés à cette gamme.";
+
+  return "Propose une réponse avant de voir la correction.";
+}
+
+function describeValidationHint(hydrated: boolean, selectedAnswerCount: number): string {
+  if (!hydrated) return "Attends le chargement de ta progression";
+  if (selectedAnswerCount === 0) return "Choisis d’abord une réponse";
+
+  return "Affiche ensuite la correction";
+}
+
+function describeAnswerFeedback(exercise: ExerciseView, grade: GradeResult, selectedAnswerLabels: readonly string[]): string {
+  if (grade.correct) return "Bonne réponse. ";
+
+  return `À corriger : tu as choisi « ${selectedAnswerLabels.join(" – ")} ». La réponse attendue est « ${displayGradeAnswer(grade.correctAnswer, exercise.kind)} ». `;
+}
+
+function describeCorrection(grade: GradeResult): string {
+  const errorMessages = grade.errors.map((error) => error.message).join(" ");
+  const errorSeparator = grade.errors.length ? " " : "";
+
+  return `${errorMessages}${errorSeparator}${grade.explanation}\nRègle à retenir : ${grade.rule}`;
+}
+
+function AnswerChoices({ exercise, selectedAnswerLabels, disabled, onSelect }: {
+  exercise: ExerciseView;
+  selectedAnswerLabels: readonly string[];
+  disabled: boolean;
+  onSelect: (option: string) => void;
+}) {
+  const chipRole = chooseChipRole(exercise.selectionMode);
+
+  return (
+    <View
+      accessibilityLabel="Choix de réponse"
+      {...(chipRole === "radio" ? { accessibilityRole: "radiogroup" as const } : {})}
+    >
+      <Row>
+        {exercise.options.map((option) => (
+          <Chip
+            key={option}
+            label={option}
+            role={chipRole}
+            selected={exercise.selectionMode !== "ordered" && selectedAnswerLabels.includes(option)}
+            disabled={disabled}
+            onPress={() => onSelect(option)}
+          />
+        ))}
+      </Row>
+    </View>
+  );
+}
+
 export default function ExercisesScreen() {
   const params = useLocalSearchParams<{ scaleId?: string | string[] }>();
   const routeScaleId = routeValue(params.scaleId);
@@ -63,9 +133,13 @@ export default function ExercisesScreen() {
   const grade = currentResponse.grade;
   const isSubmitted = grade?.graded === true;
 
-  useEffect(() => {
-    setResponse(createEmptyResponse(exercise?.id));
+  const clearResponse = (exerciseId?: string) => {
+    setResponse(createEmptyResponse(exerciseId));
     lastRecordedExerciseId.current = undefined;
+  };
+
+  useEffect(() => {
+    clearResponse(exercise?.id);
   }, [isDailySession, exercise?.id, scopedScaleId]);
 
   const selectAnswer = (option: string) => {
@@ -112,8 +186,7 @@ export default function ExercisesScreen() {
       setExerciseIndex((previousIndex) => previousIndex + 1);
     }
 
-    setResponse(createEmptyResponse());
-    lastRecordedExerciseId.current = undefined;
+    clearResponse();
   };
 
   const startDailySession = () => {
@@ -122,40 +195,17 @@ export default function ExercisesScreen() {
     setDailyExercises(makeDailyExercises(progress));
     setDailySession(true);
     setExerciseIndex(0);
-    setResponse(createEmptyResponse());
-    lastRecordedExerciseId.current = undefined;
+    clearResponse();
   };
 
   const answerLabel = exercise?.selectionMode === "ordered" ? "Ta réponse ordonnée" : "Ta sélection";
-  let chipRole: "radio" | "checkbox" | "button" = "button";
-
-  if (exercise?.selectionMode === "single") chipRole = "radio";
-  else if (exercise?.selectionMode === "multiple") chipRole = "checkbox";
-
-  let subtitle = "Propose une réponse avant de voir la correction.";
-
-  if (isDailySession) {
-    subtitle = `Question ${exerciseIndex + 1} sur ${dailyExercises.length} · environ 3 à 5 minutes`;
-  } else if (scopedScaleId) {
-    subtitle = "Tous les prochains exercices restent liés à cette gamme.";
-  }
-
-  let validationHint = "Affiche ensuite la correction";
-
-  if (!hydrated) validationHint = "Attends le chargement de ta progression";
-  else if (selectedAnswerLabels.length === 0) validationHint = "Choisis d’abord une réponse";
-
-  let answerFeedback = "";
-  let correctionFeedback = "";
-
-  if (exercise && isSubmitted && grade) {
-    answerFeedback = grade.correct
-      ? "Bonne réponse. "
-      : `À corriger : tu as choisi « ${selectedAnswerLabels.join(" – ")} ». La réponse attendue est « ${displayGradeAnswer(grade.correctAnswer, exercise.kind)} ». `;
-    const errorMessages = grade.errors.map((error) => error.message).join(" ");
-    const errorSeparator = grade.errors.length ? " " : "";
-    correctionFeedback = `${errorMessages}${errorSeparator}${grade.explanation}\nRègle à retenir : ${grade.rule}`;
-  }
+  const subtitle = describeSubtitle({
+    isDailySession,
+    exerciseIndex,
+    dailyExerciseCount: dailyExercises.length,
+    isScopedToScale: Boolean(scopedScaleId),
+  });
+  const isLastDailyExercise = isDailySession && exerciseIndex === dailyExercises.length - 1;
 
   return (
     <Screen
@@ -183,23 +233,12 @@ export default function ExercisesScreen() {
         <Card>
           <Body muted>Type : {exerciseTypeLabels[exercise.kind]}</Body>
           <Heading>{exercise.question}</Heading>
-          <View
-            accessibilityLabel="Choix de réponse"
-            {...(chipRole === "radio" ? { accessibilityRole: "radiogroup" as const } : {})}
-          >
-            <Row>
-              {exercise.options.map((option) => (
-                <Chip
-                  key={option}
-                  label={option}
-                  role={chipRole}
-                  selected={exercise.selectionMode !== "ordered" && selectedAnswerLabels.includes(option)}
-                  disabled={isSubmitted}
-                  onPress={() => selectAnswer(option)}
-                />
-              ))}
-            </Row>
-          </View>
+          <AnswerChoices
+            exercise={exercise}
+            selectedAnswerLabels={selectedAnswerLabels}
+            disabled={isSubmitted}
+            onSelect={selectAnswer}
+          />
           {selectedAnswerLabels.length
             ? <Body live>{answerLabel} : {selectedAnswerLabels.join(" – ")}</Body>
             : <Body muted>{exercise.selectionMode === "ordered"
@@ -218,19 +257,19 @@ export default function ExercisesScreen() {
             label="Valider ma réponse"
             onPress={submitAnswer}
             disabled={!hydrated || selectedAnswerLabels.length === 0}
-            hint={validationHint}
+            hint={describeValidationHint(hydrated, selectedAnswerLabels.length)}
           /> : null}
           {grade && !grade.graded
             ? <Notice danger>{grade.validationMessage ?? "Propose une réponse avant de valider."}</Notice>
             : null}
           {isSubmitted && grade ? (
             <Notice danger={!grade.correct}>
-              {answerFeedback}
-              {correctionFeedback}
+              {describeAnswerFeedback(exercise, grade, selectedAnswerLabels)}
+              {describeCorrection(grade)}
             </Notice>
           ) : null}
           {isSubmitted ? <Action
-            label={isDailySession && exerciseIndex === dailyExercises.length - 1 ? "Terminer la session" : "Question suivante"}
+            label={isLastDailyExercise ? "Terminer la session" : "Question suivante"}
             onPress={advanceExercise}
           /> : null}
         </Card>

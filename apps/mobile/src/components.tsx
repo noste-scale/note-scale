@@ -71,6 +71,13 @@ export function Body({ children, muted = false, live = false }: PropsWithChildre
   );
 }
 
+function chooseActionOpacity(disabled: boolean, pressed: boolean): number {
+  if (disabled) return 0.45;
+  if (pressed) return 0.75;
+
+  return 1;
+}
+
 export function Action({
   label,
   accessibilityLabel,
@@ -122,7 +129,7 @@ export function Action({
           backgroundColor,
           borderColor: theme.primary,
           borderWidth: secondary ? 1 : 0,
-          opacity: disabled ? 0.45 : pressed ? 0.75 : 1
+          opacity: chooseActionOpacity(disabled, pressed)
         }
       ]}
     >
